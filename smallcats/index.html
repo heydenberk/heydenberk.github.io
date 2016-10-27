@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html xmlns:svg="http://www.w3.org/2000/svg">
+<head>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/d3/3.3.13/d3.min.js" charset="utf-8"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.5.2/underscore-min.js"></script>
+    <style type="text/css">
+        body {
+            background: #EEE;
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 24px;
+        }
+
+        #container {
+        }
+
+        #game-cards {
+            display: none;
+            margin: 0 auto;
+            overflow: auto;
+        }
+
+        #game-cards.playing {
+            display: block;
+        }
+
+        #game-cards g {
+            stroke-width: 3px;
+            stroke: none;
+        }
+
+        #game-cards g .card {
+            fill: white;
+            filter: url(#dropshadow);
+        }
+
+        #game-cards g .card {
+            stroke-width: 6px;
+        }
+
+        #game-cards g:hover .card {
+            fill: #FAFAFA;
+        }
+
+        #game-cards .card.selected {
+            filter: none;
+        }
+
+        #game-cards .symbol {
+            stroke-width: 3px;
+        }
+
+        #controls {
+            font-size: 0.8em;
+            font-family: Helvetica, Arial, sans-serif;
+            line-height: 34px;
+            margin: 0 auto;
+            margin-top: 1em;
+            width: 320px;
+        }
+
+        #cards-remaining, #score {
+            float: right;
+            margin-right: 1em;
+        }
+
+        #add-card, #pause-game {
+            display: none;
+            float: right;
+            background: #CCC;
+            border: 1px #666 solid;
+            border-radius: 5px;
+            height: 30px;
+            width: 30px;
+            font-weight: bold;
+            font-size: .75em;
+            outline: none;
+        }
+
+        #pause-game {
+            display: block;
+            margin-right: 1em;
+        }
+
+        #add-card:hover, #pause-game:hover {
+            cursor: pointer;
+            background: #AAA;
+        }
+
+        #add-card.enabled {
+            display: block;
+        }
+
+        #game-cards.paused .symbol {
+            display: none;
+        }
+
+        #game-config {
+            height: 600px;
+            margin: 0 auto;
+            width: 600px;
+            display: none;
+        }
+
+        #start-game {
+            border: 1px #AAA solid;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 32px;
+            height: 64px;
+            width: 128px;
+            background: #CCC;
+        }
+
+        #game {
+            display: none;
+        }
+
+        #game.enabled {
+            display: block;
+        }
+
+
+    </style>
+<title></title>
+</head>
+<body>
+    <div id="container">
+        <div id="game-config">
+             <p>
+                <input type="radio" name="color" value="random" checked />random
+                <input type="radio" name="color" value="primary" />primary
+                <input type="radio" name="color" value="secondary" />secondary
+            </p>
+
+            <p>
+                <input type="checkbox" name="shape" value="circle" checked />circle
+                <input type="checkbox" name="shape" value="diamond" checked />diamond
+                <input type="checkbox" name="shape" value="square" checked />square
+                <input type="checkbox" name="shape" value="triangle" />triangle
+            </p>
+
+            <p>
+                <input type="checkbox" name="shading" value="colored" checked />colored
+                <input type="checkbox" name="shading" value="open" checked />open
+                <input type="checkbox" name="shading" value="shaded" checked />shaded
+                <input type="checkbox" name="shading" value="striped" />striped
+            </p>
+            <button id="start-game">start</button> 
+        </div>
+        <div id="game">
+            <svg id="game-cards">
+                <filter id="dropshadow" height="130%">
+                  <feGaussianBlur in="SourceAlpha" stdDeviation="0"/>
+                  <feOffset dx="2" dy="2" result="offsetblur"/>
+                  <feMerge>
+                    <feMergeNode/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+                <defs>
+                    <pattern id="stripes" width="10" height="10" patternUnits="userSpaceOnUse">
+                        <polygon points="0,0, 10,0 10,5 0,5" fill="black" fill-opacity="1" />
+                    </pattern>
+                </defs>
+            </svg>
+            <div id="controls">
+                <span id="timer">0:00:00</span>
+                <button id="add-card" class="enabled">+</button>
+                <button id="pause-game" class="enabled">||</button>
+                <span id="cards-remaining"></span>
+                <span id="score">0</span>
+            </div>
+        </div>
+    </div>
+    <script src="js/script.js"></script>
+</body>
+</html>
