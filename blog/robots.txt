@@ -1,0 +1,4 @@
+Sitemap: http://heydenberk.com/blog/sitemapindex.xml
+
+User-Agent: *
+Host: heydenberk.com

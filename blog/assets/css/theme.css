@@ -1,0 +1,143 @@
+@import url('https://fonts.googleapis.com/css?family=Merriweather:400,400i');
+
+body {
+    background: #f8f8f8;
+}
+
+.container {
+    font-family: Merriweather;
+    font-size: 16px;
+    max-width: 800px;
+}
+
+#notebook-container {
+    margin-bottom: 4em;
+}
+
+#notebook-container:focus {
+    outline: none;
+}
+
+#notebook-container .inner_cell {
+    
+}
+
+#notebook-container .input_prompt,
+#notebook-container .output_wrapper, {
+    font-weight: bold;
+}
+
+#notebook-container .cell {
+    line-height: 1.75em;
+    padding: 1em 0;
+}
+
+#notebook-container .cell code {
+    background: #EEE;
+    padding: 0.35em;
+}
+
+#notebook-container .text_cell {
+}
+
+#notebook-container .text_cell h3 {
+    font-size: 24px;
+    font-weight: normal;
+    font-style: italic;
+    line-height: 2em;
+}
+
+#notebook-container .prompt {
+    background: transparent !important;
+    display: none;
+}
+
+#notebook-container .code_cell {
+    font-size: 14px;
+    background: #EEE;
+    padding: 10px;
+    border: 1px #DDD solid;
+    margin-bottom: 1em;
+}
+
+#notebook-container .code_cell + .code_cell {
+    margin-top: 1em;
+}
+
+
+#notebook-container .text_cell .code_cell {
+    background: #FAFAFA;
+    border: 2px #DDD solid;
+    padding: 1em;
+}
+
+
+#notebook-container .code_cell .input_area {
+    background: #F6f6f6;
+    padding: 0.5em;
+}
+
+#notebook-container .code_cell .output_area {
+    margin-top: 12px;
+}
+
+#notebook-container .rendered_html p {
+    text-align: justify;
+}
+
+.metadata {
+    width: 50%;
+    margin: 0 auto;
+    margin-top: 1.5em;
+}
+
+.metadata p {
+    float: left;
+    padding-right: 1em;
+    margin-left: 1em;
+    border-right: 1px #888 solid;
+}
+
+.metadata p:last-child {
+    border: none;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 6em;
+    margin-top: 4em;
+}
+
+.entry-content:focus {
+    outline: none;
+}
+
+h3 {
+    margin-top: 1.25em;
+}
+
+table.dataframe {
+    font-size: 1em !important;
+    margin: 0 auto !important;
+}
+
+hr {
+    margin-top: 1em;
+}
+
+footer {
+    margin-bottom: 4em;
+    text-align: center;
+}
+
+.postlist {
+    margin-bottom: 4em;
+}
+
+.postlist li {
+    line-height: 2em;
+}
+
+.postlist li time {
+    margin-right: 2em;
+}

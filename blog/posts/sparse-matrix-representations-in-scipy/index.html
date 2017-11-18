@@ -1,0 +1,3303 @@
+<!DOCTYPE html>
+<html prefix="
+og: http://ogp.me/ns#
+article: http://ogp.me/ns/article#
+" lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sparse matrix representations in scipy | Eric Heydenblog</title>
+<link href="../../assets/css/bootstrap.min.css" rel="stylesheet" type="text/css">
+<link href="../../assets/css/html4css1.css" rel="stylesheet" type="text/css">
+<link href="../../assets/css/nikola_rst.css" rel="stylesheet" type="text/css">
+<link href="../../assets/css/code.css" rel="stylesheet" type="text/css">
+<link href="../../assets/css/colorbox.css" rel="stylesheet" type="text/css">
+<link href="../../assets/css/theme.css" rel="stylesheet" type="text/css">
+<link href="../../assets/css/ipython.min.css" rel="stylesheet" type="text/css">
+<link href="../../assets/css/nikola_ipython.css" rel="stylesheet" type="text/css">
+<meta name="theme-color" content="#5670d4">
+<meta name="generator" content="Nikola (getnikola.com)">
+<link rel="alternate" type="application/rss+xml" title="RSS" href="../../rss.xml">
+<link rel="canonical" href="http://heydenberk.com/blog/posts/sparse-matrix-representations-in-scipy/">
+<!--[if lt IE 9]><script src="../../assets/js/html5.js"></script><![endif]--><meta name="author" content="Eric Heydenberk">
+<meta property="og:site_name" content="Eric Heydenblog">
+<meta property="og:title" content="Sparse matrix representations in scipy">
+<meta property="og:url" content="http://heydenberk.com/blog/posts/sparse-matrix-representations-in-scipy/">
+<meta property="og:description" content="Introduction to sparse matrices¶A sparse matrix is just a matrix that is mostly zero. Typically, when people talk about sparse matrices in numerical computations, they mean matrices that are mostly ze">
+<meta property="og:type" content="article">
+<meta property="article:published_time" content="2017-11-26T08:00:00-05:00">
+<meta property="article:tag" content="matrices">
+<meta property="article:tag" content="numpy">
+<meta property="article:tag" content="python">
+<meta property="article:tag" content="scipy">
+<meta property="article:tag" content="sparse matrices">
+</head>
+<body>
+<a href="#content" class="sr-only sr-only-focusable">Skip to main content</a>
+
+<!-- Menubar -->
+
+<nav class="navbar navbar-inverse navbar-static-top"><div class="container">
+<!-- This keeps the margins nice -->
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-navbar" aria-controls="bs-navbar" aria-expanded="false">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="http://heydenberk.com/blog/">
+
+                <span id="blog-title">Eric Heydenblog</span>
+            </a>
+        </div>
+<!-- /.navbar-header -->
+        <div class="collapse navbar-collapse" id="bs-navbar" aria-expanded="false">
+            <ul class="nav navbar-nav">
+<li>
+<a href="../../archive.html">Archive</a>
+                </li>
+<li>
+<a href="../../categories/">Tags</a>
+                </li>
+<li>
+<a href="../../rss.xml">RSS feed</a>
+
+                
+            </li>
+</ul>
+<ul class="nav navbar-nav navbar-right">
+<li>
+    <a href="index.ipynb" id="sourcelink">Source</a>
+    </li>
+                
+            </ul>
+</div>
+<!-- /.navbar-collapse -->
+    </div>
+<!-- /.container -->
+</nav><!-- End of Menubar --><div class="container" id="content" role="main">
+    <div class="body-content">
+        <!--Body content-->
+        <div class="row">
+            
+<article class="post-text h-entry hentry postpage" itemscope="itemscope" itemtype="http://schema.org/Article"><header><h1 class="p-name entry-title" itemprop="headline name"><a href="." class="u-url">Sparse matrix representations in scipy</a></h1>
+
+        <div class="metadata">
+            <p class="byline author vcard"><span class="byline-name fn" itemprop="author">
+                    Eric Heydenberk
+            </span></p>
+            <p class="dateline"><a href="." rel="bookmark"><time class="published dt-published" datetime="2017-11-26T08:00:00-05:00" itemprop="datePublished" title="2017-11-26 08:00">2017-11-26 08:00</time></a></p>
+                    <p class="sourceline"><a href="index.ipynb" class="sourcelink">Source</a></p>
+
+        </div>
+        
+    </header><div class="e-content entry-content" itemprop="articleBody text">
+    <div tabindex="-1" id="notebook" class="border-box-sizing">
+    <div class="container" id="notebook-container">
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Introduction-to-sparse-matrices">Introduction to sparse matrices<a class="anchor-link" href="#Introduction-to-sparse-matrices">¶</a>
+</h3>
+<p>A sparse matrix is just a matrix that is mostly zero. Typically, when people talk about sparse matrices in numerical computations, they mean matrices that are mostly zero and are represented in a way that takes advantage of that sparsity to reduce required storage or optimize operations.</p>
+<p>As an extreme case, imagine a $M \times N$ matrix where $M = N = 1000000$, which is entirely zero save for a single $1$ at $(42, 999999)$. It's obvious that storing a trillion values—or 64Tb of 64-bit integers—is unnecessary, and we can write software which just assumes that the value is 0 at every index besides row $42$, column $999999$. We can describe this entire matrix with 5 integers:</p>
+<p>$M=1000000$, $N=1000000$</p>
+<p>$v=1$, $r=42$, $c=999999$.</p>
+<p>If we had a second value $3$ at position $(33, 34)$, the same scheme would still work reasonably well:</p>
+<p>$M=1000000$, $N=1000000$</p>
+<p>$v_0=1$, $r_0=42$, $c_0=999999$</p>
+<p>$v_1=3$, $r_1=33$, $c_1=34$.</p>
+<p>This is similar to the <a href="#DOK-representation">Dictionary of Keys</a> format and the <a href="#COO-representation">COOrdinate</a> format.</p>
+<p>Of course, taken to the other extreme, this is quite inefficient. If this array were fully dense, with all nonzero values, we would have to store roughly three times as many numbers than if we had just stored the values consecutively in an array.</p>
+<p>To understand how these different representations work, let's use some toy examples constructed from small matrices. In practice, there isn't much benefit to storing anything so small or so dense as a sparse matrix, but they're useful for illustrative purposes. Below we have a $(5, 5)$ matrix in which every value is either $0$ or $1$ with most values being $0$.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [1]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">m</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+<span class="p">])</span>
+
+<span class="n">m</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[1]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>matrix([[0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0],
+        [0, 0, 1, 0, 1],
+        [0, 1, 0, 1, 0]])</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>For the remainder of this post, we'll take advantage of HTML display in notebooks and the <a href="http://sympy.org"><code>sympy</code></a> pretty printer to display matrices using a little utility function.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [2]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># the following is purely for the purposes of pretty printing matrices</span>
+<span class="kn">from</span> <span class="nn">IPython.display</span> <span class="k">import</span> <span class="n">display</span>
+<span class="kn">import</span> <span class="nn">sympy</span><span class="p">;</span> <span class="n">sympy</span><span class="o">.</span><span class="n">init_printing</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">display_matrix</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">sympy</span><span class="o">.</span><span class="n">Matrix</span><span class="p">(</span><span class="n">m</span><span class="p">))</span>
+
+
+<span class="n">display_matrix</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 1 &amp; 0\\0 &amp; 0 &amp; 1 &amp; 0 &amp; 1\\0 &amp; 1 &amp; 0 &amp; 1 &amp; 0\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Much better!</p>
+<p>Our first matrix here is sparse in the strict mathematical sense — it's mostly zero — but we're using <code>np.matrix</code>, a dense matrix object. To make sparse matrices, we'll make use of the objects provided by <code>scipy.sparse</code>.</p>
+<p>The <code>scipy</code> sparse matrix constructors all accept dense matrices as inputs, which will allow us to create sparse matrices from our contrived examples and take them apart and see how they work.</p>
+<h3 id="COO-representation">COO representation<a class="anchor-link" href="#COO-representation">¶</a>
+</h3>
+<p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.coo_matrix.html#scipy.sparse.coo_matrix">scipy.sparse.coo_matrix API docs</a> | <a href="https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_.28COO.29">wikipedia</a></p>
+<p>First on our list is <code>COO</code> representation. The capitalization of the name might make it seem like an acronym, but it's just an abbreviation of coordinate, and the format itself is quite comprehensible.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [3]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">scipy</span> <span class="k">import</span> <span class="n">sparse</span>
+
+<span class="n">mat_coo</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">coo_matrix</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+<span class="n">mat_coo</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[3]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>&lt;5x5 sparse matrix of type '&lt;class 'numpy.int64'&gt;'
+	with 6 stored elements in COOrdinate format&gt;</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The <code>repr</code> of a sparse matrix doesn't show any of the data like a standard matrix does. And <code>sympy</code> doesn't understand sparse matrices of this type. To see the data, we'll have to coerce the representation back to dense.</p>
+<p>All sparse matrix representations in <code>scipy</code> have a <code>todense()</code> method which converts the matrix to a standard <code>numpy</code> matrix. (Again, the traditional definition of sparse matrix is in conflict with the conventional definition—<code>todense()</code> just changes the representation. It does not fill the zeros in with nonzero values.)</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [4]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">display_matrix</span><span class="p">(</span><span class="n">mat_coo</span><span class="o">.</span><span class="n">todense</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 1 &amp; 0\\0 &amp; 0 &amp; 1 &amp; 0 &amp; 1\\0 &amp; 1 &amp; 0 &amp; 1 &amp; 0\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>If you're like me, you might be tempted to dig into the <code>scipy</code> source to see how <code>todense()</code> is implemented on the various matrix representations. Unfortunately for us, the <code>scipy</code> source does not give itself over to inspection so easily. If you're comfortable with Fortran, LAPACK, BLAS, ATLAS, etc., the source might make more sense, but in that case, you likely have no need for this post. Instead, let's take a look at the way attributes on the COO matrix instance to see how the data is stored.</p>
+<p>COO matrices store the value, row and column for each nonzero item in the matrix. While <a href="https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_.28COO.29">wikipedia</a> describes the COO format as consisting of 3-value tuples with $(row, column, value)$ for each nonzero item, the <code>scipy</code> implementation stores the data, the row indices and the column indices each as their own array with a length equal to the number of nonzero items ($NNZ$).</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [5]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_coo</span><span class="o">.</span><span class="n">row</span><span class="p">,</span> <span class="n">mat_coo</span><span class="o">.</span><span class="n">col</span><span class="p">,</span> <span class="n">mat_coo</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[5]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>(array([0, 2, 3, 3, 4, 4], dtype=int32),
+ array([3, 3, 2, 4, 1, 3], dtype=int32),
+ array([1, 1, 1, 1, 1, 1]))</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This is easy to read and understand; at row $0$, column $3$, the value is $1$. In fact, we can easily see that all nonzero values are $1$.</p>
+<p>Let's construct a slightly-less-trivial example where the values are the integers from $1$ to $10$.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [6]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">11</span><span class="p">))</span>
+<span class="n">rows</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+<span class="n">cols</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><code>scipy.sparse.coo_matrix</code> accepts data in the canonical representation as two-tuple, in which the first item is the nonzero values, and the second item is itself a two-value tuple with the rows and columns repesctively. A second argument <code>shape</code> is required, or else it would be unclear whether empty rows and columns existed beyond the bounds of the explicitly provided data.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [7]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">display_matrix</span><span class="p">(</span>
+    <span class="n">sparse</span><span class="o">.</span><span class="n">coo_matrix</span><span class="p">((</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">)),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span><span class="o">.</span><span class="n">todense</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 5 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 8 &amp; 0\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>As I mentioned before, it's not easy to find and read the points in the <code>scipy</code> source where the various sparse representations are constructed and made dense. To illustrate how these operations and other work, let's make our own. I'm going to prefix all these simplistic sparse matrix classes with <code>Naive</code> because they're only for illustrative purposes. Real world sparse matrix libraries handle lots of corner cases, take advantage of sorting to optimize certain operations and call out to lower-level code to optimize other operations. Ours will do none of these things and instead focus on iteration, setting and getting values in order to make the details of these formats more intuitive.</p>
+<p>Below is an abstract base class describing everything we want our sparse matrix classes to handle. We'll only handle a couple bits of common functionality in our base class. It accepts and validates a keyword argument for <code>shape</code> and saves that as an instance property; likewise for a <code>dtype</code> argument which sets the type of the data (eg. float, int). It also assumes that we'll define iteration, and uses that to implement a <code>to_dense</code> method and a utility method for pretty printing it using <code>sympy</code>.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [8]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">class</span> <span class="nc">NaiveSparseMatrix</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">'shape must be provided as (M, N)'</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
+        
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+        
+    <span class="k">def</span> <span class="nf">__get__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+        
+    <span class="k">def</span> <span class="nf">__set__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+    
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span> <span class="nf">to_dense</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Our simplistic densification method constructs a numpy array, full</span>
+        <span class="c1"># of zeros, of the same shape as the sparse matrix, and then</span>
+        <span class="c1"># progressively fills it up by iterating over the nonzero values and</span>
+        <span class="c1"># indices and assigning accordingly.</span>
+        <span class="n">mat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="n">mat</span><span class="p">[</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">mat</span>
+        
+    <span class="k">def</span> <span class="nf">display</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">display_matrix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_dense</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The COO format is simple and our <code>NaiveCOOMatrix</code> class reflects that simplicity.</p>
+<p>The advantages of the format are easy to see, too. The canonical representation makes it trivial to iterate over the nonzero values; as a consequence, it's easy to construct, it's easy to iterate over the nonzero values, and it's easy to set and get items by their indices.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [9]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">class</span> <span class="nc">NaiveCOOMatrix</span><span class="p">(</span><span class="n">NaiveSparseMatrix</span><span class="p">):</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Accept a single positional argument which is the format described by</span>
+        <span class="c1"># wikipedia—a list of (row, column, value) tuples.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">items</span> <span class="o">=</span> <span class="n">items</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># We want our iterator to iterate (row, column, value) tuples, which is</span>
+        <span class="c1"># trivial in this format.</span>
+        <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span>
+    
+    <span class="k">def</span> <span class="nf">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">):</span>
+        <span class="c1"># To find an item by coordinate, we just iterate over nonzero values</span>
+        <span class="c1"># and look for matching coordinates.</span>
+        <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">)</span> <span class="o">==</span> <span class="n">coord</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">value</span>
+            
+        <span class="c1"># If we don't find it in the explicitly defined items, we know it's 0.</span>
+        <span class="k">return</span> <span class="mi">0</span>
+            
+    <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">new_value</span><span class="p">):</span>
+        <span class="c1"># Setting is similar to getting; we look for a matching coordinate, and</span>
+        <span class="c1"># if we find one, we overwrite the value at the corresponding index in</span>
+        <span class="c1"># the values array.</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">)</span> <span class="o">==</span> <span class="n">coord</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">new_value</span><span class="p">)</span>
+                <span class="k">break</span>
+        <span class="c1"># If we don't find it, we can just append it to the items array.</span>
+        <span class="c1"># Arguably, we should care about inserting it at a sorted position so</span>
+        <span class="c1"># that iteration order makes more sense, but that's not a concern for</span>
+        <span class="c1"># our toy examples.</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">new_value</span><span class="p">))</span>
+            
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Counting nonzero is also easy for this representation. We have as</span>
+        <span class="c1"># many items as we have nonzero values.</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>OK! We've made a class for representing a sparse matrix. Besides the obvious optimizations, ours differs in some really important ways from <code>scipy.sparse.coo_matrix</code>.</p>
+<ul>
+<li>It accepts a list of (row, column, value) tuples rather 3 arrays, one of each kind.</li>
+<li>We spell it <code>to_dense()</code> rather than <code>todense()</code> because we're good people who like nice APIs.</li>
+<li>
+<code>scipy.sparse.coo_matrix</code> doesn't support indexing or assignment, and <em>does</em> support a whole range of mathematical operations.</li>
+<li>Ours supports iterating nonzero values along with their indices, but doesn't guarantee an order. It's not clear how useful this is, but all the previously-stated caveats about this being for illustrative perhaps apply here.</li>
+</ul>
+<p>Since ours accepts the data in a different format, let's put our data into that format and construct it.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [10]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">items</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">data</span><span class="p">))</span>
+
+<span class="n">naive_coo</span> <span class="o">=</span> <span class="n">NaiveCOOMatrix</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">naive_coo</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 5 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 8 &amp; 0\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>We did it! Let's sanity check our implementation by accessing a defined value, $5$ at position $(2, 3)$.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [11]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_coo</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[11]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$5$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Accessing $(0, 0)$, for which we didn't supply a value, should return $0$.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [12]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_coo</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[12]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$0$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>We define its <code>__len__</code> as the number of its nonzero values.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [13]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">len</span><span class="p">(</span><span class="n">naive_coo</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[13]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$10$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>If we assign a nonzero value to $(0, 0)$, we should be able to access it subsequently.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [14]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_coo</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+<span class="n">naive_coo</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}-1 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 5 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 8 &amp; 0\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [15]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_coo</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[15]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$-1$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>And now the len should be a bit bigger.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [16]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">len</span><span class="p">(</span><span class="n">naive_coo</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[16]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$11$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Assigning a new value to a coordinate with a nonzero value should overwrite the existing value and not increase the length.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [17]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_coo</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="mi">99</span>
+
+<span class="n">naive_coo</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}-1 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 99 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 8 &amp; 0\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [18]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">len</span><span class="p">(</span><span class="n">naive_coo</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[18]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$11$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>So that's a COO matrix. One major downside of this representation is the one mentioned in our giant example in the opening. Depending on how sparse a matrix is, and ours is not very sparse, the COO representation might actually <em>increase</em> the required storage. Let's look at how many values it takes to represent out matrix.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [19]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">naive_coo</span><span class="o">.</span><span class="n">items</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[19]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$33$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The COO format requires storing 33 numbers to represent 11 nonzero numbers. Storing every value consecutively would only require storing 25 numbers. Different representations take advantage of the structure of the sparsity to minimize storage and optimize operations.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="DOK-representation">DOK representation<a class="anchor-link" href="#DOK-representation">¶</a>
+</h3>
+<p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.dok_matrix.html">scipy.sparse.dok_matrix API docs</a> | <a href="https://en.wikipedia.org/wiki/Sparse_matrix#Dictionary_of_keys_.28DOK.29">wikipedia</a></p>
+<p><code>DOK</code> stands for dictionary of keys and it's exactly what it sounds like. Of all the formats discussed in this post, it's by far the simplest to implement using vanilla Python. Like COO, it stores 3 numbers per each non-zero number, but it uses a dictionary where the key is the pair of row and column and the value is the number.</p>
+<p>All <code>scipy.sparse</code> matrix constructors support being supplied a single argument with a dense matrix, so we'll create the same example as the previous using that call signature, and then let's take it apart and see what it's made of.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [20]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_dok</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">dok_matrix</span><span class="p">([</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">9</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">]</span>
+<span class="p">])</span>
+
+<span class="n">display_matrix</span><span class="p">(</span><span class="n">mat_dok</span><span class="o">.</span><span class="n">todense</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 5 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 0 &amp; 8\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><code>sparse_dok</code> implements <code>keys()</code>, <code>values()</code> and <code>items()</code> just like a vanilla python <code>dict</code>.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [21]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">list</span><span class="p">(</span><span class="n">mat_dok</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[21]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>[((3, 1), 7),
+ ((4, 4), 10),
+ ((2, 1), 4),
+ ((2, 0), 3),
+ ((2, 3), 5),
+ ((0, 4), 2),
+ ((0, 3), 1),
+ ((3, 4), 8),
+ ((2, 4), 6),
+ ((4, 0), 9)]</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Implementation-wise, it doesn't get simpler. We store the dict, and we use it for iteration, lookup and assignment.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [22]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">class</span> <span class="nc">NaiveDOKMatrix</span><span class="p">(</span><span class="n">NaiveSparseMatrix</span><span class="p">):</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">pairs</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">),</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+            <span class="k">yield</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">coord</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            
+    <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">new_value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">coord</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_value</span>
+            
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+
+
+<span class="n">naive_dok</span> <span class="o">=</span> <span class="n">NaiveDOKMatrix</span><span class="p">(</span><span class="n">mat_dok</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+
+<span class="n">naive_dok</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 5 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 0 &amp; 8\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [23]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_dok</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[23]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>5</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [24]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_dok</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[24]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$0$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [25]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_dok</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">11</span>
+
+<span class="n">naive_dok</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}11 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 5 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 0 &amp; 8\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="LIL-Representation">LIL Representation<a class="anchor-link" href="#LIL-Representation">¶</a>
+</h3>
+<p>The LIL or list of lists representation is also straightforward to understand and implement. LIL is a row-oriented representation, in which row-based operations are easier to implement and may be less complex to compute.</p>
+<p>A LIL matrix is constructed from a single array of length $M$ (the number of rows) in which each item is a list of <code>(column_index, value)</code> pairs.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [26]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">class</span> <span class="nc">NaiveLILMatrix</span><span class="p">(</span><span class="n">NaiveSparseMatrix</span><span class="p">):</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">items</span> <span class="o">=</span> <span class="n">items</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># It's necessary to enumerate here, because the row index is</span>
+        <span class="c1"># not stored explicitly but rather is the index in items at</span>
+        <span class="c1"># which the pairs of column indexes and values are stored.</span>
+        <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">row_items</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">row_items</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">):</span>
+        <span class="c1"># To get an item, we look up the column-value pairs at the</span>
+        <span class="c1"># supplied row index, then look for a matching column index.</span>
+        <span class="k">for</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">[</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">]]:</span>
+            <span class="k">if</span> <span class="n">column</span> <span class="o">==</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+                <span class="k">return</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="mi">0</span>
+            
+    <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">new_value</span><span class="p">):</span>
+        <span class="c1"># Setting value sis slightly trickier. We enumerate the column</span>
+        <span class="c1"># index, value pairs for the given row, keeping track of the</span>
+        <span class="c1"># current index as we iterate. If a matching column is found,</span>
+        <span class="c1"># we use that index to overwrite. Otherwise, we append the new</span>
+        <span class="c1"># column_index, value pair to the row array.</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">[</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">]]):</span>
+            <span class="k">if</span> <span class="n">column</span> <span class="o">==</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">[</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">]][</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">new_value</span><span class="p">)</span>
+                <span class="k">break</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">[</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">new_value</span><span class="p">))</span>
+            
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># The NNZ of the a LIL matrix is the sum of the length of the</span>
+        <span class="c1"># column index, value arrays in each per-row array.</span>
+        <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">row_items</span><span class="p">)</span> <span class="k">for</span> <span class="n">row_items</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [27]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">items</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)],</span>
+    <span class="p">[],</span>
+    <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">)],</span>
+    <span class="p">[(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">)],</span>
+    <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span> <span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">10</span><span class="p">)]</span>
+<span class="p">]</span>
+<span class="n">naive_lil</span> <span class="o">=</span> <span class="n">NaiveLILMatrix</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+
+<span class="n">naive_lil</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 4 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 8 &amp; 0\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="CSR-representation">CSR representation<a class="anchor-link" href="#CSR-representation">¶</a>
+</h3>
+<p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csr_matrix.html">scipy.sparse.csr_matrix API docs</a>  | <a href="https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_row_.28CSR.2C_CRS_or_Yale_format.29">wikipedia</a></p>
+<p>CSR stands for <em>compressed sparse row</em> and is good for implementing fast arithmetic operations as well as slicing by row. It's more complicated than the previous examples and it can be used to take better advantage of the sparse structure.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [28]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_csr</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">((</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">)),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">display_matrix</span><span class="p">(</span><span class="n">mat_csr</span><span class="o">.</span><span class="n">todense</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 5 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 8 &amp; 0\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Now let's take it apart to see what's inside.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [29]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_csr</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">mat_csr</span><span class="o">.</span><span class="n">indptr</span><span class="p">,</span> <span class="n">mat_csr</span><span class="o">.</span><span class="n">indices</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[29]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>(array([ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10], dtype=int64),
+ array([ 0,  2,  2,  6,  8, 10], dtype=int32),
+ array([3, 4, 0, 1, 3, 4, 1, 3, 0, 4], dtype=int32))</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>It's clear enough that <code>data</code> is the nonzero values in "row-major" order, which is to say, left to right then top to bottom, much like how English text is read. It's less clear, though, what the other arrays are.</p>
+<p>The second array is nondecreasing — each value is equal to or greater than the previous. Its first value is $0$ and its last is $10$. It's hard to say what that might be, because we provided 10 input values in the range $[0, 10)$.</p>
+<p>Let's double our nonzero values to make it more clear what's going on here.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [30]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">doubled_data</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="o">*</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">data</span><span class="p">]</span>
+<span class="n">mat_csr</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">((</span><span class="n">doubled_data</span><span class="p">,</span> <span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">)),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">display_matrix</span><span class="p">(</span><span class="n">mat_csr</span><span class="o">.</span><span class="n">todense</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 2 &amp; 4\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\6 &amp; 8 &amp; 0 &amp; 10 &amp; 12\\0 &amp; 14 &amp; 0 &amp; 16 &amp; 0\\18 &amp; 0 &amp; 0 &amp; 0 &amp; 20\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [31]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_csr</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">mat_csr</span><span class="o">.</span><span class="n">indptr</span><span class="p">,</span> <span class="n">mat_csr</span><span class="o">.</span><span class="n">indices</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[31]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>(array([ 2,  4,  6,  8, 10, 12, 14, 16, 18, 20], dtype=int64),
+ array([ 0,  2,  2,  6,  8, 10], dtype=int32),
+ array([3, 4, 0, 1, 3, 4, 1, 3, 0, 4], dtype=int32))</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The data in the first array doubles and everything else stays the same. We can reasonably conclude that the second array doesn't hold the nonzero data but describes its position in the matrix.</p>
+<p>Things become much more obvious when we look at <code>indptr</code> in pairs.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [32]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pointer_ranges</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span>
+    <span class="n">mat_csr</span><span class="o">.</span><span class="n">indptr</span><span class="p">,</span>
+    <span class="n">mat_csr</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
+
+<span class="n">pointer_ranges</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[32]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>[(0, 2), (2, 2), (2, 6), (6, 8), (8, 10)]</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [33]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="p">[</span><span class="n">j</span> <span class="o">-</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">pointer_ranges</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[33]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>[2, 0, 4, 2, 2]</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>When we subtract the latter value from the former value, we get the number of nonzero values in each row. And this is the key to how the CSR representation works. <code>indptr</code> has pointers to the two other arrays, describing successively where the data for each row starts and begins.  The numbers in <code>data</code> are, as already figured out, the nonzero numbers in the matrix. The numbers in <code>indices</code> are the column indexes at which those corresponding nonzero numbers belong.</p>
+<p>Equipped with this knowledge, we can access the values and the column indices by row.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [34]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">values_by_row</span> <span class="o">=</span> <span class="p">[</span><span class="n">mat_csr</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">j</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">pointer_ranges</span><span class="p">]</span>
+
+<span class="n">values_by_row</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[34]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>[array([2, 4], dtype=int64),
+ array([], dtype=int64),
+ array([ 6,  8, 10, 12], dtype=int64),
+ array([14, 16], dtype=int64),
+ array([18, 20], dtype=int64)]</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [35]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">row_indices_by_row</span> <span class="o">=</span> <span class="p">[</span><span class="n">mat_csr</span><span class="o">.</span><span class="n">indices</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">j</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">pointer_ranges</span><span class="p">]</span>
+
+<span class="n">row_indices_by_row</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[35]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>[array([3, 4], dtype=int32),
+ array([], dtype=int32),
+ array([0, 1, 3, 4], dtype=int32),
+ array([1, 3], dtype=int32),
+ array([0, 4], dtype=int32)]</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Now we know enough to write our own naive implementation. Like last time, we're going to change things from the way scipy works for sake of clarity.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [36]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">class</span> <span class="nc">NaiveCSRMatrix</span><span class="p">(</span><span class="n">NaiveSparseMatrix</span><span class="p">):</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">row_extents</span><span class="p">,</span> <span class="n">column_indices</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Accept the canonical representation of values, row_extents</span>
+        <span class="c1"># and column_indices.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">values</span> <span class="o">=</span> <span class="n">values</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span> <span class="o">=</span> <span class="n">row_extents</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span> <span class="o">=</span> <span class="n">column_indices</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Take the row_extents and zip them pairwise to get the index</span>
+        <span class="c1"># ranges for each row, and use those to slice the values and the</span>
+        <span class="c1"># column indices.</span>
+        <span class="n">pointer_ranges</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="c1"># Since pointer_ranges is naturally M+1, or one greater than the</span>
+        <span class="c1"># number of rows, our pairwise ranges correspond directly to the</span>
+        <span class="c1"># row indices, and so we can iterate them with enumerate to keep</span>
+        <span class="c1"># track of the row index.</span>
+        <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="p">(</span><span class="n">row_start</span><span class="p">,</span> <span class="n">row_end</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">pointer_ranges</span><span class="p">):</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">row_start</span><span class="p">:</span><span class="n">row_end</span><span class="p">]</span>
+            <span class="n">columns</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="p">[</span><span class="n">row_start</span><span class="p">:</span><span class="n">row_end</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">value</span><span class="p">,</span> <span class="n">column</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">columns</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">):</span>
+        <span class="c1"># To get items by their indices, we take the supplied row index</span>
+        <span class="c1"># to look up the indices for values in that row.</span>
+        <span class="n">row</span><span class="p">,</span> <span class="n">column</span> <span class="o">=</span> <span class="n">coord</span>
+        <span class="n">row_start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row</span><span class="p">]</span>
+        <span class="n">row_end</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+        
+        <span class="c1"># Then we look for the supplied column index in the column_indices</span>
+        <span class="c1"># array, starting where the row starts and ending where the row ends.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="n">row_start</span><span class="p">,</span> <span class="n">row_end</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        
+        <span class="c1"># Now we have the index of the column_indices where the column is;</span>
+        <span class="c1"># that corresponds to the index in values where the value is.</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+            
+    <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">new_value</span><span class="p">):</span>
+        <span class="c1"># Setting an item is similar to getting it. We slice the column_indices</span>
+        <span class="c1"># into the ones belonging to the supplied row, then we check to see if</span>
+        <span class="c1"># the supplied column index is in that slice. If so, we look up the index</span>
+        <span class="c1"># as above and then overwrite it. If not, we insert the value at the end</span>
+        <span class="c1"># of the row, we insert the column index at the end of the row, and we </span>
+        <span class="c1"># increment all the row indices afterward.</span>
+        <span class="n">row</span><span class="p">,</span> <span class="n">column</span> <span class="o">=</span> <span class="n">coord</span>
+        <span class="n">row_start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row</span><span class="p">]</span>
+        <span class="n">row_end</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">column_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="p">[</span><span class="n">row_start</span><span class="p">:</span><span class="n">row_end</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">column_indices</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="n">row_start</span><span class="p">,</span> <span class="n">row_end</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">row_end</span><span class="p">,</span> <span class="n">new_value</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">row_end</span><span class="p">,</span> <span class="n">column</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">row_index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row_index</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Counting nonzero values remains simple.</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+
+
+<span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">10</span><span class="p">]</span>
+<span class="n">row_extents</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">10</span><span class="p">]</span>
+<span class="n">column_indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+
+<span class="n">mat_csr</span> <span class="o">=</span> <span class="n">NaiveCSRMatrix</span><span class="p">(</span>
+    <span class="n">values</span><span class="p">,</span> <span class="n">row_extents</span><span class="p">,</span> <span class="n">column_indices</span><span class="p">,</span>
+    <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+
+<span class="n">mat_csr</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 5 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 8 &amp; 0\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [37]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_csr</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[37]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$5$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [38]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_csr</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[38]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$0$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [39]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_csr</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="mi">11</span>
+
+<span class="n">mat_csr</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\3 &amp; 4 &amp; 0 &amp; 5 &amp; 6\\0 &amp; 7 &amp; 0 &amp; 8 &amp; 11\\9 &amp; 0 &amp; 0 &amp; 0 &amp; 10\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [40]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">len</span><span class="p">(</span><span class="n">mat_csr</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[40]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$11$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>CSR is a row-oriented format which makes certain row-wise operations simpler to implement and less computationally complex to execute. If we wanted to get the nonzero values and their respective column indices for each row, we could do so easily.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [41]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">csr_to_row_values</span><span class="p">(</span><span class="n">mat_csr</span><span class="p">):</span>
+    <span class="n">row_ranges</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="n">mat_csr</span><span class="o">.</span><span class="n">row_extents</span><span class="p">,</span> <span class="n">mat_csr</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span>
+            <span class="n">mat_csr</span><span class="o">.</span><span class="n">column_indices</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">],</span>
+            <span class="n">mat_csr</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]))</span>
+        <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="ow">in</span> <span class="n">row_ranges</span>
+    <span class="p">]</span>
+
+<span class="n">csr_to_row_values</span><span class="p">(</span><span class="n">mat_csr</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[41]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$\left [ \left [ \left ( 3, \quad 1\right ), \quad \left ( 4, \quad 2\right )\right ], \quad \left [ \right ], \quad \left [ \left ( 0, \quad 3\right ), \quad \left ( 1, \quad 4\right ), \quad \left ( 3, \quad 5\right ), \quad \left ( 4, \quad 6\right )\right ], \quad \left [ \left ( 1, \quad 7\right ), \quad \left ( 3, \quad 8\right ), \quad \left ( 4, \quad 11\right )\right ], \quad \left [ \left ( 0, \quad 9\right ), \quad \left ( 4, \quad 10\right )\right ]\right ]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Getting the nonzero values for each column from a CSR-represented matrix is significantly more difficult. In the implementation below, the row_extent pairs are used to create pairs of column indices and values for each row. In order to ensure that missing column show up in the result as empty arrays, we flat map those pairs into a single list, group by the column index, create a dictionary from those groups, and use that to look up the values per column.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [42]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">itertools</span>
+
+<span class="k">def</span> <span class="nf">csr_to_column_values</span><span class="p">(</span><span class="n">mat_csr</span><span class="p">):</span>
+    <span class="n">row_ranges</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="n">mat_csr</span><span class="o">.</span><span class="n">row_extents</span><span class="p">,</span> <span class="n">mat_csr</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+    <span class="n">indices_values</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">pair</span> <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="ow">in</span> <span class="n">row_ranges</span>
+        <span class="k">for</span> <span class="n">pair</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+            <span class="n">mat_csr</span><span class="o">.</span><span class="n">column_indices</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">],</span>
+            <span class="n">mat_csr</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">])</span>
+    <span class="p">]</span>
+    
+    <span class="n">column_key</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">pair</span><span class="p">:</span> <span class="n">pair</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">column_value_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">column</span><span class="p">:</span> <span class="p">[</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">group</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">column</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span>
+            <span class="nb">sorted</span><span class="p">(</span><span class="n">indices_values</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">column_key</span><span class="p">),</span> <span class="n">column_key</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="n">column_value_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">column_index</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">for</span> <span class="n">column_index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">mat_csr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="p">]</span>
+    
+
+<span class="n">csr_to_column_values</span><span class="p">(</span><span class="n">mat_csr</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[42]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$\left [ \left [ 3, \quad 9\right ], \quad \left [ 4, \quad 7\right ], \quad \left [ \right ], \quad \left [ 1, \quad 5, \quad 8\right ], \quad \left [ 2, \quad 6, \quad 11, \quad 10\right ]\right ]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="CSC-representation">CSC representation<a class="anchor-link" href="#CSC-representation">¶</a>
+</h3>
+<p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html#scipy.sparse.csc_matrix">scipy.sparse.csc_matrix API docs</a> | 
+<a href="https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_column_.28CSC_or_CCS.29">wikipedia</a></p>
+<p>CSC stands for 'compressed sparse column', and as you might expect, it's the sister format to CSR, except the pointer array holds the extents of the columns.</p>
+<p>We'll make this using the signature that allows us to supply a dense matrix, which we'll make by calling the <code>to_dense()</code> method we defined on all these naive matrix objects.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [43]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_csc</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">csc_matrix</span><span class="p">(</span><span class="n">mat_csr</span><span class="o">.</span><span class="n">to_dense</span><span class="p">(),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">mat_csc</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[43]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>&lt;5x5 sparse matrix of type '&lt;class 'numpy.int64'&gt;'
+	with 11 stored elements in Compressed Sparse Column format&gt;</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><code>scipy.sparse.csc_matrix</code> uses the same naming convention for its canonical representation as does <code>csr_matrix</code>. We can see that our data, which was mostly in row-major order (save for that stray 11 we assigned post-construction), is no longer mostly-ordered in its representation because it's column-major ordered now.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [44]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_csc</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">mat_csc</span><span class="o">.</span><span class="n">indptr</span><span class="p">,</span> <span class="n">mat_csc</span><span class="o">.</span><span class="n">indices</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[44]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>(array([ 3,  9,  4,  7,  1,  5,  8,  2,  6, 11, 10], dtype=int64),
+ array([ 0,  2,  4,  4,  7, 11], dtype=int32),
+ array([2, 4, 2, 3, 0, 2, 3, 0, 2, 3, 4], dtype=int32))</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Creating a <code>NaiveSparseCSC</code> class is largely a matter of swapping <code>column</code> and <code>row</code> in various places in our <code>NaiveSparseCSR</code> class. The same goes for writing column and row slicing functionality. The implementation is left as an exercise to the reader, or at least to the reader's imagination.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="BSR-representation">BSR representation<a class="anchor-link" href="#BSR-representation">¶</a>
+</h3>
+<p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.bsr_matrix.html">scipy.sparse.bsr_matrix API docs</a></p>
+<p>BSR stands for 'block sparse row' and it is also related to CSR.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [45]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_bsr</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">bsr_matrix</span><span class="p">((</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">)),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">mat_bsr</span><span class="o">.</span><span class="n">todense</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[45]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>matrix([[ 0,  0,  0,  1,  2],
+        [ 0,  0,  0,  0,  0],
+        [ 3,  4,  0,  5,  6],
+        [ 0,  7,  0,  8,  0],
+        [ 9,  0,  0,  0, 10]], dtype=int64)</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [46]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_bsr</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">mat_bsr</span><span class="o">.</span><span class="n">indptr</span><span class="p">,</span> <span class="n">mat_bsr</span><span class="o">.</span><span class="n">indices</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[46]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>(array([[[ 1]],
+ 
+        [[ 2]],
+ 
+        [[ 3]],
+ 
+        [[ 4]],
+ 
+        [[ 5]],
+ 
+        [[ 6]],
+ 
+        [[ 7]],
+ 
+        [[ 8]],
+ 
+        [[ 9]],
+ 
+        [[10]]], dtype=int64),
+ array([ 0,  2,  2,  6,  8, 10], dtype=int32),
+ array([3, 4, 0, 1, 3, 4, 1, 3, 0, 4], dtype=int32))</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>We're running into the limitations of our small contrived example, so let's borrow this example from the <code>scipy</code> docs.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [47]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">indptr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">])</span>
+<span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">])</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">mat_bsr</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">bsr_matrix</span><span class="p">((</span><span class="n">data</span><span class="p">,</span><span class="n">indices</span><span class="p">,</span><span class="n">indptr</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+
+<span class="n">display_matrix</span><span class="p">(</span><span class="n">mat_bsr</span><span class="o">.</span><span class="n">todense</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}1 &amp; 1 &amp; 0 &amp; 0 &amp; 2 &amp; 2\\1 &amp; 1 &amp; 0 &amp; 0 &amp; 2 &amp; 2\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 3 &amp; 3\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 3 &amp; 3\\4 &amp; 4 &amp; 5 &amp; 5 &amp; 6 &amp; 6\\4 &amp; 4 &amp; 5 &amp; 5 &amp; 6 &amp; 6\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Like the name implies, BSR format represents a sparse matrix as a dense array of dense blocks.</p>
+<p>Here, <code>scipy</code> infers the blocksize from the data we provide. Let's look at that data again.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [48]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">data</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[48]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>array([[[1, 1],
+        [1, 1]],
+
+       [[2, 2],
+        [2, 2]],
+
+       [[3, 3],
+        [3, 3]],
+
+       [[4, 4],
+        [4, 4]],
+
+       [[5, 5],
+        [5, 5]],
+
+       [[6, 6],
+        [6, 6]]])</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><code>data</code> is an array in which every value is a $2 \times 2$ array—effectively, a little matrix. BSR requires that this block size divides the matrix's dimensions evenly, which allows the other indices to be relative to that block size. So our $6 \times 6$ matrix is indexable as a $3 \times 3$ matrix in which the items are not individual values but block matrices themselves. Once we make that jump in indexability, most of the rest is CSR-like.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [49]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">class</span> <span class="nc">NaiveBSRMatrix</span><span class="p">(</span><span class="n">NaiveSparseMatrix</span><span class="p">):</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blocks</span><span class="p">,</span> <span class="n">row_extents</span><span class="p">,</span> <span class="n">column_indices</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Accept the canonical representation of values, row_extents</span>
+        <span class="c1"># and column_indices.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span> <span class="o">=</span> <span class="n">blocks</span>
+        <span class="c1"># Assume that all blocks are the same size and the block size</span>
+        <span class="c1"># divides the matrix evenly.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span> <span class="o">=</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">len</span><span class="p">(</span><span class="n">blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span> <span class="o">=</span> <span class="n">row_extents</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span> <span class="o">=</span> <span class="n">column_indices</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">_scale_column</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">column_index</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="c1"># Take a column block index and an offset within that block and </span>
+        <span class="c1"># return an absolute column index.</span>
+        <span class="k">return</span> <span class="n">column_index</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">offset</span>
+    
+    <span class="k">def</span> <span class="nf">_scale_coord</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)):</span>
+        <span class="c1"># Take a block coordinate and an offset within that block and </span>
+        <span class="c1"># return an absolute coordinate.</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_scale_row</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">offset</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_scale_column</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">offset</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="p">)</span>
+    
+    <span class="k">def</span> <span class="nf">_scale_row</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">row_index</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="c1"># Take a row block index and an offset within that block and </span>
+        <span class="c1"># return an absolute row index.</span>
+        <span class="k">return</span> <span class="n">row_index</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">offset</span>
+    
+    <span class="k">def</span> <span class="nf">_unscale_column</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">column_index</span><span class="p">):</span>
+        <span class="c1"># Take an absolute column index and return the column index of</span>
+        <span class="c1"># that block and the relative column index within that block.</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">column_index</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">column_index</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="p">)</span>
+    
+    <span class="k">def</span> <span class="nf">_unscale_coord</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">):</span>
+        <span class="c1"># Take an absolute coordinate and return the coordinate of</span>
+        <span class="c1"># that block and the relative coordinate within that block.</span>
+        <span class="n">row</span><span class="p">,</span> <span class="n">row_offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unscale_row</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">column</span><span class="p">,</span> <span class="n">column_offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unscale_column</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">),</span> <span class="p">(</span><span class="n">row_offset</span><span class="p">,</span> <span class="n">column_offset</span><span class="p">)</span>
+    
+    <span class="k">def</span> <span class="nf">_unscale_row</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">row_index</span><span class="p">):</span>
+        <span class="c1"># Take an absolute row index and return the row index of</span>
+        <span class="c1"># that block and the relative row index within that block.</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">row_index</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">row_index</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Zip the row extents pairwise to get the index ranges for</span>
+        <span class="c1"># each block row.</span>
+        <span class="n">pointer_ranges</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+
+        <span class="k">for</span> <span class="n">row_index</span><span class="p">,</span> <span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">pointer_ranges</span><span class="p">):</span>
+            <span class="n">blocks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+            <span class="n">column_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+            <span class="c1"># By zipping the blocks with themselves, we transpose the blocks</span>
+            <span class="c1"># that belong to the same rows, thereby making a list that is as long</span>
+            <span class="c1"># as the height of the block size, in which item is a tuple with the</span>
+            <span class="c1"># same length as the number of blocks in a row, containing the lists</span>
+            <span class="c1"># for that row of that block.</span>
+            <span class="c1"># So [</span>
+            <span class="c1">#     [1, 2, 0, 0, 5, 6],</span>
+            <span class="c1">#     [3, 4, 0, 0, 7, 8],</span>
+            <span class="c1">#     ...</span>
+            <span class="c1"># ]</span>
+            <span class="c1">#</span>
+            <span class="c1"># which is represented as</span>
+            <span class="c1"># [</span>
+            <span class="c1">#     [[1, 2], [3, 4]],</span>
+            <span class="c1">#     [[5, 6], [7, 8]]</span>
+            <span class="c1"># ]</span>
+            <span class="c1">#</span>
+            <span class="c1"># becomes [[[1, 2], [5, 6]], [[3, 4], [7, 8]].</span>
+            <span class="c1">#</span>
+            <span class="c1"># By enumerating these rows with indices, we keep track of the</span>
+            <span class="c1"># row offset within the block.</span>
+            <span class="k">for</span> <span class="n">row_offset</span><span class="p">,</span> <span class="n">row_block</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">blocks</span><span class="p">)):</span>
+                <span class="c1"># By zipping together those transposed row blocks with the column</span>
+                <span class="c1"># indices for this block, we get lists of block rows, per blocks,</span>
+                <span class="c1"># with their column indices alongside.</span>
+                <span class="c1"># So [[[1, 2], [5, 6]], [[3, 4], [7, 8]]</span>
+                <span class="c1"># </span>
+                <span class="c1"># becomes [[0, [[1, 2], [5, 6]]], [2, [[3, 4], [7, 8]]]]</span>
+                <span class="k">for</span> <span class="n">column_index</span><span class="p">,</span> <span class="n">block</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">column_indices</span><span class="p">,</span> <span class="n">row_block</span><span class="p">):</span>
+                    <span class="c1"># As we enumerate the values inside those blocks above, we can keep track</span>
+                    <span class="c1"># of the column offset within the bock. Now we have the value, the row offset,</span>
+                    <span class="c1"># the column offset, and the block coordinate, and can use all of these</span>
+                    <span class="c1"># to generate the tuple of absolute row, column and value.</span>
+                    <span class="k">for</span> <span class="n">column_offset</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">block</span><span class="p">):</span>
+                        <span class="k">yield</span> <span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_scale_row</span><span class="p">(</span><span class="n">row_index</span><span class="p">,</span> <span class="n">row_offset</span><span class="p">),</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_scale_column</span><span class="p">(</span><span class="n">column_index</span><span class="p">,</span> <span class="n">column_offset</span><span class="p">),</span>
+                            <span class="n">value</span>
+                        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">):</span>
+        <span class="c1"># Getting works a lot like it does for the CSR representation with</span>
+        <span class="c1"># the addition of a coordinate transformation.</span>
+        <span class="c1">#</span>
+        <span class="c1"># First, "unscale" the absolute coordinate to get block-relative</span>
+        <span class="c1"># indexes and offsets.</span>
+        <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">),</span> <span class="p">(</span><span class="n">row_offset</span><span class="p">,</span> <span class="n">column_offset</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unscale_coord</span><span class="p">(</span><span class="n">coord</span><span class="p">)</span>
+
+        <span class="c1"># From here, the logic is nearly identical to the CSR representation.</span>
+        <span class="n">row_start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row</span><span class="p">]</span>
+        <span class="n">row_end</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="n">row_start</span><span class="p">,</span> <span class="n">row_end</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        
+        <span class="c1"># The index that we have is the index in the blocks array where our</span>
+        <span class="c1"># block is. The positions of the value inside that block is just</span>
+        <span class="c1"># the row and column offset we got by unscaling the input coordinate.</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="n">row_offset</span><span class="p">][</span><span class="n">column_offset</span><span class="p">]</span>
+            
+    <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">new_value</span><span class="p">):</span>
+        <span class="c1"># Setting an existing value is quite similar to CSR.</span>
+        <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">),</span> <span class="p">(</span><span class="n">row_offset</span><span class="p">,</span> <span class="n">column_offset</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unscale_coord</span><span class="p">(</span><span class="n">coord</span><span class="p">)</span>
+
+        <span class="n">row_start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row</span><span class="p">]</span>
+        <span class="n">row_end</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">column_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="p">[</span><span class="n">row_start</span><span class="p">:</span><span class="n">row_end</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">column_indices</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="n">row_start</span><span class="p">,</span> <span class="n">row_end</span><span class="p">)</span>
+            <span class="c1"># We want to set just one value within the block, and the input</span>
+            <span class="c1"># coordinate dictates where within that block once we find the </span>
+            <span class="c1"># block to change.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="n">row_offset</span><span class="p">][</span><span class="n">column_offset</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># But we can't just add a value if it's not in an existing block.</span>
+            <span class="c1"># We have to initialize a a new empty block and add it to our blocks.</span>
+            <span class="n">new_block</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
+                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="p">]</span>
+            <span class="n">new_block</span><span class="p">[</span><span class="n">row_offset</span><span class="p">][</span><span class="n">column_offset</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_value</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">row_end</span><span class="p">,</span> <span class="n">new_block</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">column_indices</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">row_end</span><span class="p">,</span> <span class="n">column</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">row_index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unscale_row</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">row_extents</span><span class="p">[</span><span class="n">row_index</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Our len here is a bit more complicated! It's the number of blocks</span>
+        <span class="c1"># times the number of values inside each block.</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+
+<span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[[</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">2</span><span class="p">],</span>  <span class="p">[</span><span class="mi">3</span><span class="p">,</span>  <span class="mi">4</span><span class="p">]],</span>
+    <span class="p">[[</span><span class="mi">5</span><span class="p">,</span>  <span class="mi">6</span><span class="p">],</span>  <span class="p">[</span><span class="mi">7</span><span class="p">,</span>  <span class="mi">8</span><span class="p">]],</span>
+    <span class="p">[[</span><span class="mi">9</span><span class="p">,</span>  <span class="mi">10</span><span class="p">],</span> <span class="p">[</span><span class="mi">11</span><span class="p">,</span> <span class="mi">12</span><span class="p">]],</span>
+    <span class="p">[[</span><span class="mi">13</span><span class="p">,</span> <span class="mi">14</span><span class="p">],</span> <span class="p">[</span><span class="mi">15</span><span class="p">,</span> <span class="mi">16</span><span class="p">]],</span>
+    <span class="p">[[</span><span class="mi">17</span><span class="p">,</span> <span class="mi">18</span><span class="p">],</span> <span class="p">[</span><span class="mi">19</span><span class="p">,</span> <span class="mi">20</span><span class="p">]],</span>
+    <span class="p">[[</span><span class="mi">21</span><span class="p">,</span> <span class="mi">22</span><span class="p">],</span> <span class="p">[</span><span class="mi">23</span><span class="p">,</span> <span class="mi">24</span><span class="p">]]</span>
+<span class="p">]</span>
+<span class="n">row_extents</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span>
+<span class="n">column_indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+
+<span class="n">naive_bsr</span> <span class="o">=</span> <span class="n">NaiveBSRMatrix</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">row_extents</span><span class="p">,</span> <span class="n">column_indices</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+
+<span class="n">naive_bsr</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}1 &amp; 2 &amp; 0 &amp; 0 &amp; 5 &amp; 6\\3 &amp; 4 &amp; 0 &amp; 0 &amp; 7 &amp; 8\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 9 &amp; 10\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 11 &amp; 12\\13 &amp; 14 &amp; 17 &amp; 18 &amp; 21 &amp; 22\\15 &amp; 16 &amp; 19 &amp; 20 &amp; 23 &amp; 24\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [50]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_bsr</span><span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[50]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$14$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [51]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_bsr</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[51]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$0$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [52]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_bsr</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mi">11</span>
+
+<span class="n">naive_bsr</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}1 &amp; 2 &amp; 0 &amp; 0 &amp; 5 &amp; 6\\3 &amp; 4 &amp; 0 &amp; 0 &amp; 7 &amp; 8\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 9 &amp; 10\\0 &amp; 0 &amp; 11 &amp; 0 &amp; 11 &amp; 12\\13 &amp; 14 &amp; 17 &amp; 18 &amp; 21 &amp; 22\\15 &amp; 16 &amp; 19 &amp; 20 &amp; 23 &amp; 24\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="DIA-Representation">DIA Representation<a class="anchor-link" href="#DIA-Representation">¶</a>
+</h3>
+<p><code>DIA</code> format, short for diagonal, represents the data as a series of vectors along different diagonals, the diagonals themselves being indicated by relative offsets from the main diagonal.</p>
+<p>The identity matrix provides a simple example.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [53]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">identity_10</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">identity</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+<span class="n">display_matrix</span><span class="p">(</span><span class="n">identity_10</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>We can construct the <code>scipy</code> sparse version by passing this dense matrix to the <code>dia_matrix</code> constructor.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [54]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_dia</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">dia_matrix</span><span class="p">(</span><span class="n">identity_10</span><span class="p">)</span>
+
+<span class="n">mat_dia</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[54]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>&lt;10x10 sparse matrix of type '&lt;class 'numpy.int64'&gt;'
+	with 10 stored elements (1 diagonals) in DIAgonal format&gt;</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Looking at its canonical representation, we find that we have an array of our main diagonal and a single offset value of zero.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [55]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_dia</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">mat_dia</span><span class="o">.</span><span class="n">offsets</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[55]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>(array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]), array([0], dtype=int32))</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>To get a better handle on how this works, let's make a $5 \times 5$ matrix which has $1$ on its main diagonal, even numbers above it, odd numbers below it, up to $5$.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [56]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="p">]</span>
+<span class="n">mat_dia</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">dia_matrix</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+
+<span class="n">display_matrix</span><span class="p">(</span><span class="n">mat_dia</span><span class="o">.</span><span class="n">todense</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}1 &amp; 2 &amp; 4 &amp; 0 &amp; 0\\3 &amp; 1 &amp; 2 &amp; 4 &amp; 0\\5 &amp; 3 &amp; 1 &amp; 2 &amp; 4\\0 &amp; 5 &amp; 3 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 5 &amp; 3 &amp; 1\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [57]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mat_dia</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">mat_dia</span><span class="o">.</span><span class="n">offsets</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[57]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>(array([[5, 5, 5, 0, 0],
+        [3, 3, 3, 3, 0],
+        [1, 1, 1, 1, 1],
+        [0, 2, 2, 2, 2],
+        [0, 0, 4, 4, 4]]), array([-2, -1,  0,  1,  2], dtype=int32))</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Looking inside this one we can see that our diagonals are each in their own array, with an array indicating their offsets from the main diagonal—negative being below, positive being above, and 0 being the main diagonal.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [58]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">class</span> <span class="nc">NaiveDIAMatrix</span><span class="p">(</span><span class="n">NaiveSparseMatrix</span><span class="p">):</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">diagonals</span><span class="p">,</span> <span class="n">offsets</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">diagonals</span> <span class="o">=</span> <span class="n">diagonals</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">offsets</span> <span class="o">=</span> <span class="n">offsets</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Iterate a range (0, rows) to iterate by row index.</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="c1"># Enumerate the offsets with index so that we can use that</span>
+            <span class="c1"># index to access the diagonals.</span>
+            <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">offset</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">offsets</span><span class="p">):</span>
+                <span class="c1"># Whether a diagonal is visible is relative to the current row.</span>
+                <span class="c1"># All the positive-offset diagonals are visible in the first row,</span>
+                <span class="c1"># and all the negative-offset diagonals are visible in the last</span>
+                <span class="c1"># row. The inequality check below handles those cases and the</span>
+                <span class="c1"># in-between cases.</span>
+                <span class="k">if</span> <span class="n">row</span> <span class="o">*</span> <span class="o">-</span><span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">offset</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">row</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">row</span><span class="p">,</span> <span class="n">row</span> <span class="o">+</span> <span class="n">offset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">diagonals</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="n">row</span> <span class="o">+</span> <span class="n">offset</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">):</span>
+        <span class="c1"># As mentioned above, offsets are relative to row. In fact, the offset</span>
+        <span class="c1"># is equal to the column index minus the row index. So we can calculate</span>
+        <span class="c1"># which diagonal a provided coordinate would belong to by calculating</span>
+        <span class="c1"># that offset, which we use to check the offsets array to find the value.</span>
+        <span class="n">row</span><span class="p">,</span> <span class="n">column</span> <span class="o">=</span> <span class="n">coord</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="n">column</span> <span class="o">-</span> <span class="n">row</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">offsets</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">diagonals</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="n">column</span><span class="p">]</span>
+            
+    <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">new_value</span><span class="p">):</span>
+        <span class="c1"># Setting and item is similar to getting an item, so long as the diagonal</span>
+        <span class="c1"># already exists.</span>
+        <span class="n">row</span><span class="p">,</span> <span class="n">column</span> <span class="o">=</span> <span class="n">coord</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="n">column</span> <span class="o">-</span> <span class="n">row</span>
+        <span class="k">if</span> <span class="n">offset</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">offsets</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">offsets</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">diagonals</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_value</span>
+        <span class="c1"># If the diagonal does not yet exist, we have to create an empty one and</span>
+        <span class="c1"># set the provided index to the provided value.</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">new_diagonal</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span>
+            <span class="n">new_diagonal</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_value</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">diagonals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_diagonal</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">offsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
+            
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Our len here is a bit more complicated! It's the number of blocks</span>
+        <span class="c1"># times the number of values inside each block.</span>
+        <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="nb">abs</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span> <span class="k">for</span> <span class="n">offset</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">offsets</span><span class="p">)</span>
+
+
+<span class="n">diagonals</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+<span class="p">]</span>
+
+<span class="n">offsets</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span>  <span class="mi">2</span><span class="p">]</span>
+<span class="n">naive_dia</span> <span class="o">=</span> <span class="n">NaiveDIAMatrix</span><span class="p">(</span><span class="n">diagonals</span><span class="p">,</span> <span class="n">offsets</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+
+<span class="n">naive_dia</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}1 &amp; 2 &amp; 4 &amp; 0 &amp; 0\\3 &amp; 1 &amp; 2 &amp; 4 &amp; 0\\5 &amp; 3 &amp; 1 &amp; 2 &amp; 4\\0 &amp; 5 &amp; 3 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 5 &amp; 3 &amp; 1\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [59]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_dia</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[59]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$2$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [60]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_dia</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[60]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$1$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [61]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_dia</span><span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[61]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$0$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [62]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">len</span><span class="p">(</span><span class="n">naive_dia</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[62]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$19$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [63]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_dia</span><span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">9</span>
+
+<span class="nb">len</span><span class="p">(</span><span class="n">naive_dia</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[63]:</div>
+
+
+
+
+<div class="output_latex output_subarea output_execute_result">
+$$20$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In [64]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">naive_dia</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_latex output_subarea ">
+$$\left[\begin{matrix}1 &amp; 2 &amp; 4 &amp; 0 &amp; 0\\3 &amp; 1 &amp; 2 &amp; 4 &amp; 0\\5 &amp; 3 &amp; 1 &amp; 2 &amp; 4\\0 &amp; 5 &amp; 3 &amp; 1 &amp; 2\\9 &amp; 0 &amp; 5 &amp; 3 &amp; 1\end{matrix}\right]$$
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Conclusion">Conclusion<a class="anchor-link" href="#Conclusion">¶</a>
+</h3>
+<p>Sparse matrices might seem mystifying at first glance, but they're straightforward enough that every flavor of representation available in <code>scipy.sparse</code> is easy enough to read and write using (mostly) pure Python.</p>
+<p>That being said, there's a lot more to learn about sparse matrices representations — particularly, how the various representations can be leveraged to optimize mathematical operations and the complexity of constructing and converting between these representations. I wanted to provide examples in this post of how sparse matrices naturally arise from certain applications and I still hope to do so in a future post.</p>
+<p>Thanks for reading this far! You can ask questions, file corrections or otherwise make noise towards me on <a href="https://twitter.com/heydenberk">Twitter</a> and I'll edit this post to link to the HN thread when and if it comes into existence.</p>
+
+</div>
+</div>
+</div>
+    </div>
+  </div>
+
+    </div>
+    <aside class="postpromonav"><nav><ul itemprop="keywords" class="tags">
+<li><a class="tag p-category" href="../../categories/matrices/" rel="tag">matrices</a></li>
+            <li><a class="tag p-category" href="../../categories/numpy/" rel="tag">numpy</a></li>
+            <li><a class="tag p-category" href="../../categories/python/" rel="tag">python</a></li>
+            <li><a class="tag p-category" href="../../categories/scipy/" rel="tag">scipy</a></li>
+            <li><a class="tag p-category" href="../../categories/sparse-matrices/" rel="tag">sparse matrices</a></li>
+        </ul></nav></aside><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" integrity="sha256-SDRP1VVYu+tgAGKhddBSl5+ezofHKZeI+OzxakbIe/Y=" crossorigin="anonymous"></script><script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+    tex2jax: {
+        inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+        displayMath: [ ['$$','$$'], ["\\[","\\]"] ],
+        processEscapes: true
+    },
+    displayAlign: 'center', // Change this to 'left' if you want left-aligned equations.
+    "HTML-CSS": {
+        styles: {'.MathJax_Display': {"margin": 0}}
+    }
+});
+</script></article>
+</div>
+        <!--End of body content-->
+
+        <footer id="footer">
+            Contents © 2017         <a href="mailto:eric@heydenberk.com">Eric Heydenberk</a> - Powered by         <a href="https://getnikola.com" rel="nofollow">Nikola</a>         
+            
+        </footer>
+</div>
+</div>
+
+            <script src="../../assets/js/jquery.min.js"></script><script src="../../assets/js/bootstrap.min.js"></script><script src="../../assets/js/moment-with-locales.min.js"></script><script src="../../assets/js/fancydates.js"></script><script src="../../assets/js/jquery.colorbox-min.js"></script><script>$('a.image-reference:not(.islink) img:not(.islink)').parent().colorbox({rel:"gal",maxWidth:"100%",maxHeight:"100%",scalePhotos:true});</script><!-- fancy dates --><script>
+    moment.locale("en");
+    fancydates(2, "YYYY-MM-DD HH:mm");
+    </script><!-- end fancy dates -->
+</body>
+</html>
