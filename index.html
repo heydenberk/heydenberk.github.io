@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html xmlns:svg="http://www.w3.org/2000/svg">
+<head>
+    <meta charset="utf-8"></meta>
+    <script src="js/d3.min.js" charset="utf-8"></script>
+    <script src="js/lodash.min.js"></script>
+    <style type="text/css">
+        html, body, #svg {
+            height: 100%;
+            width: 100%;
+            padding: 0;
+            margin: 0;
+        }
+
+        #svg, #container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+        }
+
+        #container {
+            font-family: sans-serif;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 7em;
+            margin-bottom: 0.25em;
+            text-align: center;
+            width: 100%;
+        }
+
+        .icons {
+            text-align: center;
+        }
+
+        .icons a {
+            color: #000;
+            font-weight: bold;
+            text-decoration: none;
+            opacity: 0.7;
+        }
+
+        .icons a:hover {
+            opacity: 1;
+        }
+
+        .icon {
+            height: 4em;
+            width: 4em;
+            margin-bottom: 0.25em;
+        }
+        .icon-bubble {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 2em 2.5em;
+            border-radius: 9em;
+            margin-left: 1em;
+        }
+
+        #container {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap; 
+            justify-content: center;
+        }
+    </style>
+<title></title>
+</head>
+<body>
+    <svg id="svg"></svg>
+    <script src="js/stochator.min.js"></script>
+    <script src="js/app.js"></script>
+    <div id="container" style="">
+        <div>
+            <h1>eric heydenberk</h1>
+            <div class="icons" style="display: flex;  justify-content: center">
+                <a href="https://github.com/heydenberk" target="_blank">
+                    <div class="icon-bubble">
+                        <img class="icon" src="img/github.svg" /><br />
+                        github
+                    </div>
+                </a>
+                <a href="/blog">
+                    <div class="icon-bubble">
+                        <img class="icon" src="img/rss.svg" /><br />
+                        blog
+                    </div>
+                </a>
+                <a href="https://twitter.com/heydenberk" target="_blank">
+                    <div class="icon-bubble">
+                        <img class="icon" src="img/twitter.svg" /><br />
+                        twitter
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
