@@ -20,12 +20,13 @@ article: http://ogp.me/ns/article#
 <link rel="alternate" type="application/rss+xml" title="RSS" href="../../rss.xml">
 <link rel="canonical" href="http://heydenberk.com/blog/posts/sparse-matrix-representations-in-scipy/">
 <!--[if lt IE 9]><script src="../../assets/js/html5.js"></script><![endif]--><meta name="author" content="Eric Heydenberk">
+<link rel="prev" href="../demystifying-pandas-numpy-filtering/" title="Demystifying pandas and numpy filtering" type="text/html">
 <meta property="og:site_name" content="Eric Heydenblog">
 <meta property="og:title" content="Sparse matrix representations in scipy">
 <meta property="og:url" content="http://heydenberk.com/blog/posts/sparse-matrix-representations-in-scipy/">
 <meta property="og:description" content="Introduction to sparse matrices¶A sparse matrix is just a matrix that is mostly zero. Typically, when people talk about sparse matrices in numerical computations, they mean matrices that are mostly ze">
 <meta property="og:type" content="article">
-<meta property="article:published_time" content="2017-11-26T08:00:00-05:00">
+<meta property="article:published_time" content="2017-11-25T08:00:00-05:00">
 <meta property="article:tag" content="matrices">
 <meta property="article:tag" content="numpy">
 <meta property="article:tag" content="python">
@@ -79,7 +80,7 @@ article: http://ogp.me/ns/article#
             <p class="byline author vcard"><span class="byline-name fn" itemprop="author">
                     Eric Heydenberk
             </span></p>
-            <p class="dateline"><a href="." rel="bookmark"><time class="published dt-published" datetime="2017-11-26T08:00:00-05:00" itemprop="datePublished" title="2017-11-26 08:00">2017-11-26 08:00</time></a></p>
+            <p class="dateline"><a href="." rel="bookmark"><time class="published dt-published" datetime="2017-11-25T08:00:00-05:00" itemprop="datePublished" title="2017-11-25 08:00">2017-11-25 08:00</time></a></p>
                     <p class="sourceline"><a href="index.ipynb" class="sourcelink">Download notebook</a></p>
 
         </div>
@@ -103,6 +104,8 @@ article: http://ogp.me/ns/article#
 <p>$M=1000000$, $N=1000000$</p>
 <p>$v_0=1$, $r_0=42$, $c_0=999999$</p>
 <p>$v_1=3$, $r_1=33$, $c_1=34$.</p>
+<!-- TEASER_END -->
+
 <p>This is similar to the <a href="#DOK-representation">Dictionary of Keys</a> format and the <a href="#COO-representation">COOrdinate</a> format.</p>
 <p>Of course, taken to the other extreme, this is quite inefficient. If this array were fully dense, with all nonzero values, we would have to store roughly three times as many numbers than if we had just stored the values consecutively in an array.</p>
 <p>To understand how these different representations work, let's use some toy examples constructed from small matrices. In practice, there isn't much benefit to storing anything so small or so dense as a sparse matrix, but they're useful for illustrative purposes. Below we have a $(5, 5)$ matrix in which every value is either $0$ or $1$ with most values being $0$.</p>
@@ -216,6 +219,7 @@ $$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 0\\0 &amp; 0 &amp; 0 &amp;
 <p>Much better!</p>
 <p>Our first matrix here is sparse in the strict mathematical sense — it's mostly zero — but we're using <code>np.matrix</code>, a dense matrix object. To make sparse matrices, we'll make use of the objects provided by <code>scipy.sparse</code>.</p>
 <p>The <code>scipy</code> sparse matrix constructors all accept dense matrices as inputs, which will allow us to create sparse matrices from our contrived examples and take them apart and see how they work.</p>
+<hr>
 <h3 id="COO-representation">COO representation<a class="anchor-link" href="#COO-representation">¶</a>
 </h3>
 <p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.coo_matrix.html#scipy.sparse.coo_matrix">scipy.sparse.coo_matrix API docs</a> | <a href="https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_.28COO.29">wikipedia</a></p>
@@ -972,15 +976,7 @@ $$33$$
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>The COO format requires storing 33 numbers to represent 11 nonzero numbers. Storing every value consecutively would only require storing 25 numbers. Different representations take advantage of the structure of the sparsity to minimize storage and optimize operations.</p>
-
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing text_cell rendered">
-<div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
+<hr>
 <h3 id="DOK-representation">DOK representation<a class="anchor-link" href="#DOK-representation">¶</a>
 </h3>
 <p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.dok_matrix.html">scipy.sparse.dok_matrix API docs</a> | <a href="https://en.wikipedia.org/wiki/Sparse_matrix#Dictionary_of_keys_.28DOK.29">wikipedia</a></p>
@@ -1254,6 +1250,7 @@ $$\left[\begin{matrix}11 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
+<hr>
 <h3 id="LIL-Representation">LIL Representation<a class="anchor-link" href="#LIL-Representation">¶</a>
 </h3>
 <p>The LIL or list of lists representation is also straightforward to understand and implement. LIL is a row-oriented representation, in which row-based operations are easier to implement and may be less complex to compute.</p>
@@ -1360,6 +1357,7 @@ $$\left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 1 &amp; 2\\0 &amp; 0 &amp; 0 &amp;
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
+<hr>
 <h3 id="CSR-representation">CSR representation<a class="anchor-link" href="#CSR-representation">¶</a>
 </h3>
 <p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csr_matrix.html">scipy.sparse.csr_matrix API docs</a>  | <a href="https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_row_.28CSR.2C_CRS_or_Yale_format.29">wikipedia</a></p>
@@ -2077,6 +2075,7 @@ $$\left [ \left [ 3, \quad 9\right ], \quad \left [ 4, \quad 7\right ], \quad \l
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
+<hr>
 <h3 id="CSC-representation">CSC representation<a class="anchor-link" href="#CSC-representation">¶</a>
 </h3>
 <p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html#scipy.sparse.csc_matrix">scipy.sparse.csc_matrix API docs</a> | 
@@ -2182,6 +2181,7 @@ $$\left [ \left [ 3, \quad 9\right ], \quad \left [ 4, \quad 7\right ], \quad \l
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
+<hr>
 <h3 id="BSR-representation">BSR representation<a class="anchor-link" href="#BSR-representation">¶</a>
 </h3>
 <p><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.bsr_matrix.html">scipy.sparse.bsr_matrix API docs</a></p>
@@ -2708,6 +2708,7 @@ $$\left[\begin{matrix}1 &amp; 2 &amp; 0 &amp; 0 &amp; 5 &amp; 6\\3 &amp; 4 &amp;
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
+<hr>
 <h3 id="DIA-Representation">DIA Representation<a class="anchor-link" href="#DIA-Representation">¶</a>
 </h3>
 <p><code>DIA</code> format, short for diagonal, represents the data as a series of vectors along different diagonals, the diagonals themselves being indicated by relative offsets from the main diagonal.</p>
@@ -3245,6 +3246,7 @@ $$\left[\begin{matrix}1 &amp; 2 &amp; 4 &amp; 0 &amp; 0\\3 &amp; 1 &amp; 2 &amp;
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
+<hr>
 <h3 id="Conclusion">Conclusion<a class="anchor-link" href="#Conclusion">¶</a>
 </h3>
 <p>Sparse matrices might seem mystifying at first glance, but they're straightforward enough that every flavor of representation available in <code>scipy.sparse</code> is easy enough to read and write using (mostly) pure Python.</p>
@@ -3264,6 +3266,11 @@ $$\left[\begin{matrix}1 &amp; 2 &amp; 4 &amp; 0 &amp; 0\\3 &amp; 1 &amp; 2 &amp;
             <li><a class="tag p-category" href="../../categories/python/" rel="tag">python</a></li>
             <li><a class="tag p-category" href="../../categories/scipy/" rel="tag">scipy</a></li>
             <li><a class="tag p-category" href="../../categories/sparse-matrices/" rel="tag">sparse matrices</a></li>
+        </ul>
+<ul class="pager hidden-print">
+<li class="previous">
+                <a href="../demystifying-pandas-numpy-filtering/" rel="prev" title="Demystifying pandas and numpy filtering">Previous post</a>
+            </li>
         </ul></nav></aside><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" integrity="sha256-SDRP1VVYu+tgAGKhddBSl5+ezofHKZeI+OzxakbIe/Y=" crossorigin="anonymous"></script><script type="text/x-mathjax-config">
 MathJax.Hub.Config({
     tex2jax: {

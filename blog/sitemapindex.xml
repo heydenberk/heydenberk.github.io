@@ -15,11 +15,11 @@
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/categories/matrices.xml</loc>
-  <lastmod>2017-11-17T13:04:00Z</lastmod>
+  <lastmod>2017-11-25T13:42:00Z</lastmod>
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/categories/numpy.xml</loc>
-  <lastmod>2017-11-17T13:09:00Z</lastmod>
+  <lastmod>2017-11-25T13:42:00Z</lastmod>
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/categories/pandas.xml</loc>
@@ -27,7 +27,7 @@
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/categories/python.xml</loc>
-  <lastmod>2017-11-17T13:09:00Z</lastmod>
+  <lastmod>2017-11-25T13:42:00Z</lastmod>
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/categories/scikit-learn.xml</loc>
@@ -35,7 +35,7 @@
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/categories/scipy.xml</loc>
-  <lastmod>2017-11-17T13:04:00Z</lastmod>
+  <lastmod>2017-11-25T13:42:00Z</lastmod>
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/categories/sklearn.xml</loc>
@@ -43,7 +43,7 @@
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/categories/sparse-matrices.xml</loc>
-  <lastmod>2017-11-17T13:04:00Z</lastmod>
+  <lastmod>2017-11-25T13:42:00Z</lastmod>
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/galleries/rss.xml</loc>
@@ -51,10 +51,10 @@
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/rss.xml</loc>
-  <lastmod>2017-11-17T13:09:00Z</lastmod>
+  <lastmod>2017-11-25T13:42:00Z</lastmod>
  </sitemap>
  <sitemap>
   <loc>http://heydenberk.com/blog/sitemap.xml</loc>
-  <lastmod>2017-11-25T13:07:00Z</lastmod>
+  <lastmod>2017-11-25T13:57:00Z</lastmod>
  </sitemap>
 </sitemapindex>

@@ -145,3 +145,7 @@ footer {
 .navbar-nav {
     float: right;
 }
+
+article + article {
+    border-top: 2px #ccc solid;
+}

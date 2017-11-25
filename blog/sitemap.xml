@@ -19,7 +19,7 @@
  </url>
  <url>
   <loc>http://heydenberk.com/blog/archive.html</loc>
-  <lastmod>2017-11-25T13:07:00Z</lastmod>
+  <lastmod>2017-11-25T13:57:00Z</lastmod>
  </url>
  <url>
   <loc>http://heydenberk.com/blog/categories/</loc>
@@ -76,5 +76,9 @@
  <url>
   <loc>http://heydenberk.com/blog/posts/demystifying-pandas-numpy-filtering/</loc>
   <lastmod>2017-11-04T15:58:00Z</lastmod>
+ </url>
+ <url>
+  <loc>http://heydenberk.com/blog/posts/sparse-matrix-representations-in-scipy/</loc>
+  <lastmod>2017-11-04T16:15:00Z</lastmod>
  </url>
 </urlset>
