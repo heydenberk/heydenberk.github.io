@@ -86,8 +86,8 @@ body {
 }
 
 .metadata {
-    width: 50%;
-    margin: 0 auto;
+    display: flex;
+    justify-content: center;
     margin-top: 1.5em;
 }
 
@@ -140,4 +140,8 @@ footer {
 
 .postlist li time {
     margin-right: 2em;
+}
+
+.navbar-nav {
+    float: right;
 }
