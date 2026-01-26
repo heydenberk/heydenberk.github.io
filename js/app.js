@@ -5,7 +5,7 @@ const createPointGrid = (width, height, spacingX, spacingY) => {
     let currentY = -spacingY;
     let points = [];
     while (currentY < height + spacingY * 2) {
-        let row = Math.floor(currentY / spacingY);
+        let row = Math.floor((currentY + spacingY) / spacingY);
         let currentX = row % 2 === 0 ? -spacingX : -spacingX / 2;
         while (currentX < width + spacingX * 2) {
             points.push([currentX, currentY]);
@@ -14,6 +14,79 @@ const createPointGrid = (width, height, spacingX, spacingY) => {
         currentY += spacingY;
     }
     return points;
+};
+
+const hexagon = (cx, cy, radius) => [
+    [cx, cy - radius],
+    [cx + radius * Math.sqrt(3) / 2, cy - radius / 2],
+    [cx + radius * Math.sqrt(3) / 2, cy + radius / 2],
+    [cx, cy + radius],
+    [cx - radius * Math.sqrt(3) / 2, cy + radius / 2],
+    [cx - radius * Math.sqrt(3) / 2, cy - radius / 2]
+];
+
+const polygonSides = polygon =>
+    _.zip(polygon, [...polygon.slice(1), polygon[0]]);
+
+const hexagonSquares = (hexagon, radius) => {
+    const sides = polygonSides(hexagon);
+
+    const square4 = [
+        sides[3][0],
+        sides[3][1],
+        [
+            sides[3][1][0] - radius / 2,
+            sides[3][1][1] + radius * Math.sqrt(3) / 2
+        ],
+        [
+            sides[3][0][0] - radius / 2,
+            sides[3][0][1] + radius * Math.sqrt(3) / 2
+        ]
+    ];
+
+    const square5 = [
+        sides[4][0],
+        sides[4][1],
+        [sides[4][1][0] - radius, sides[4][1][1]],
+        [sides[4][1][0] - radius, sides[4][1][1] + radius],
+    ];
+
+    const square6 = [
+        sides[5][0],
+        sides[5][1],
+        [
+            sides[5][1][0] - radius / 2,
+            sides[5][1][1] - radius * Math.sqrt(3) / 2
+        ],
+        [
+            sides[5][0][0] - radius / 2,
+            sides[5][0][1] - radius * Math.sqrt(3) / 2
+        ]
+    ];
+    return [square4, square5, square6];
+};
+
+const hexagonTriangles = (hexagon, radius) => {
+    const triangle1 = [
+        hexagon[0],
+        [hexagon[0][0] + radius / 2, hexagon[0][1] - radius * Math.sqrt(3) / 2],
+        [hexagon[0][0] - radius / 2, hexagon[0][1] - radius * Math.sqrt(3) / 2]
+    ];
+    const triangle2 = [
+        hexagon[1],
+        [hexagon[1][0] + radius, hexagon[1][1]],
+        [hexagon[1][0] + radius / 2, hexagon[1][1] - radius * Math.sqrt(3) / 2]
+    ];
+    return [triangle1, triangle2];
+};
+
+const hexagonInnerTriangles = (hexagon, radius, [cx, cy]) => {
+    const sides = polygonSides(hexagon);
+    return [
+        [sides[0][0], sides[0][1], [cx, cy]],
+        [sides[2][0], sides[2][1], [cx, cy]],
+        [sides[4][0], sides[4][1], [cx, cy]]
+    ];
 };
 
 const pointsToString = (points) =>
@@ -34,7 +107,7 @@ const createColorScale = (hue) =>
             4)
         );
 
-const cellSpacing = 80;
+const r = 80;
 
 const [minSaturation, maxSaturation] = [0.25, 0.3];
 const [minLightness, maxLightness] = [0.8, 0.92];
@@ -46,15 +119,17 @@ const pointMutator = new Stochator(
     {}, {mean: 0, min: -20, max: 20, stdev: 10},
     ([threshold, change]) => threshold > 0.999 ? change : 0);
 
-const mutatePoints = points => points.map(
+const mutateGridPoints = gridPoints => gridPoints.map(
     ([x, y]) => [x + pointMutator.next(), y + pointMutator.next()]);
 
-const computeVoronoi = (points, width, height) => {
-    const voronoi = d3.voronoi()
-        .extent([[-1, -1], [width + 1, height + 1]]);
-
-    const diagram = voronoi(points);
-    return diagram.polygons().map(cell => cell || []);
+const generatePolygons = (gridPoints) => {
+    const hexagons = gridPoints.map(([cx, cy]) => hexagon(cx, cy, r));
+    const squares = _.flatten(hexagons.map(h => hexagonSquares(h, r)));
+    const triangles = _.flatten(hexagons.map(h => hexagonTriangles(h, r)));
+    const innerTriangles = _.flatten(
+        _.zip(hexagons, gridPoints).map(([h, centroid]) =>
+            hexagonInnerTriangles(h, r, centroid)));
+    return _.concat(hexagons, squares, triangles, innerTriangles);
 };
 
 const initializeGlobalState = () => {
@@ -64,19 +139,16 @@ const initializeGlobalState = () => {
     global.viewWidth = width;
     global.viewHeight = height;
 
-    const grid = createPointGrid(width, height, cellSpacing * 1.5, cellSpacing * 1.3);
+    const grid = createPointGrid(width, height, r * 2.728, r * 2.3625);
 
     const startingHue = Stochator.randomInteger(0, 360);
     hueGenerator.setValue(startingHue);
 
-    const startingFills = new Stochator().next(grid.length);
-
     global.hue = startingHue;
     global.colorScale = createColorScale(hue);
-    global.fills = startingFills;
-    global.points = grid;
-    global.basePoints = grid.map(p => [...p]);
-    global.polygons = computeVoronoi(grid, width, height);
+    global.gridPoints = grid;
+    global.polygons = generatePolygons(grid);
+    global.fills = new Stochator().next(polygons.length);
 
     global.stepIncrement = 100;
     global.running = true;
@@ -113,8 +185,8 @@ const step = () => {
     if (running) {
         colorScale = createColorScale(hueGenerator.next());
         fills = mutateFills(fills);
-        points = mutatePoints(points);
-        polygons = computeVoronoi(points, viewWidth, viewHeight);
+        gridPoints = mutateGridPoints(gridPoints);
+        polygons = generatePolygons(gridPoints);
 
         global.requestAnimationFrame(() => draw(colorScale, fills, polygons));
     }
@@ -132,7 +204,7 @@ let isDragging = false;
 
 const distortPoints = (mouseX, mouseY, strength) => {
     const radius = 200;
-    points = points.map(([x, y]) => {
+    gridPoints = gridPoints.map(([x, y]) => {
         const dx = x - mouseX;
         const dy = y - mouseY;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -147,7 +219,7 @@ const distortPoints = (mouseX, mouseY, strength) => {
         }
         return [x, y];
     });
-    polygons = computeVoronoi(points, viewWidth, viewHeight);
+    polygons = generatePolygons(gridPoints);
     draw(colorScale, fills, polygons);
 };
 
