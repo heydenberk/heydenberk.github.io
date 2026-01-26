@@ -264,7 +264,66 @@ const step = () => {
 
 document.addEventListener('visibilitychange', () => {
     running = !document.hidden;
-    console.log('Running', running);
+});
+
+// Click and drag interaction
+let isDragging = false;
+let dragStart = null;
+
+const distortPoints = (mouseX, mouseY, strength) => {
+    const radius = 200;
+    points = points.map(([x, y]) => {
+        const dx = x - mouseX;
+        const dy = y - mouseY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < radius && dist > 0) {
+            const force = strength * (1 - dist / radius);
+            const angle = Math.atan2(dy, dx);
+            return [
+                x + Math.cos(angle) * force,
+                y + Math.sin(angle) * force
+            ];
+        }
+        return [x, y];
+    });
+    polygons = reconstructPoints(pointsIndexes, points);
+    draw(colorScale, fills, polygons);
+};
+
+document.addEventListener('mousedown', (e) => {
+    if (e.target.closest('#container')) return;
+    isDragging = true;
+    dragStart = { x: e.clientX, y: e.clientY };
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    distortPoints(e.clientX, e.clientY, 15);
+});
+
+document.addEventListener('mouseup', () => {
+    isDragging = false;
+    dragStart = null;
+});
+
+// Touch support
+document.addEventListener('touchstart', (e) => {
+    if (e.target.closest('#container')) return;
+    isDragging = true;
+    const touch = e.touches[0];
+    dragStart = { x: touch.clientX, y: touch.clientY };
+});
+
+document.addEventListener('touchmove', (e) => {
+    if (!isDragging) return;
+    const touch = e.touches[0];
+    distortPoints(touch.clientX, touch.clientY, 15);
+});
+
+document.addEventListener('touchend', () => {
+    isDragging = false;
+    dragStart = null;
 });
 
 
