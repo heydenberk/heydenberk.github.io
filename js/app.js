@@ -17,7 +17,7 @@ const createPointGrid = (width, height, spacingX, spacingY) => {
 };
 
 const pointsToString = (points) =>
-    points.map(point => point.join(",")).join(" ");
+    points ? points.map(point => point.join(",")).join(" ") : "";
 
 const hueGenerator = new Stochator(
     {mean: 1, min: 0, stdev: 0.5},
