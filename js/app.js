@@ -54,10 +54,7 @@ const computeVoronoi = (points, width, height) => {
         .extent([[-1, -1], [width + 1, height + 1]]);
 
     const diagram = voronoi(points);
-    return points.map((_, i) => {
-        const cell = diagram.cellPolygon(i);
-        return cell || [];
-    });
+    return diagram.polygons().map(cell => cell || []);
 };
 
 const initializeGlobalState = () => {
