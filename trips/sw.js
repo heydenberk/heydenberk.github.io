@@ -36,9 +36,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Trip pages + PWA assets: network-first with cache fallback for offline.
+  // GitHub Pages serves with max-age=600; "no-cache" forces revalidation so a
+  // fresh deploy shows up immediately instead of after the HTTP cache expires.
   if (url.origin === location.origin && url.pathname.startsWith("/trips/")) {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: "no-cache" })
         .then((resp) => {
           if (resp.ok) {
             const copy = resp.clone();
