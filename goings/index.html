@@ -49,8 +49,8 @@ h2.sect {
 }
 h2.sect:not(:first-child) { margin-top: 22px; }
 
-label.f { display: block; margin-bottom: 10px; }
-label.f span {
+.f { display: block; margin-bottom: 10px; }
+.f > span {
   display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--muted); margin-bottom: 3px;
 }
@@ -112,6 +112,18 @@ button[disabled] { opacity: 0.45; cursor: default; }
 #bulk { background: var(--bg); padding: 12px; margin-top: 10px; border-left: 8px solid var(--secondary); }
 #bulk textarea { font-size: 13px; margin-bottom: 10px; }
 #bulk-preview b { color: var(--ink); }
+#pal-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 4px; }
+.palchip {
+  display: flex; align-items: center; gap: 7px; justify-content: flex-start;
+  padding: 5px 7px; background: transparent; color: var(--ink);
+  border: 2px solid transparent; box-shadow: none;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: none;
+}
+.palchip:hover { background: var(--bg); }
+.palchip.on { border-color: var(--ink); background: var(--bg); }
+.palchip .sw { display: flex; flex: 0 0 auto; box-shadow: 1px 1px 0 var(--shadow); }
+.palchip .sw i { display: block; width: 8px; height: 15px; }
+.palchip b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #pal-panel { background: var(--bg); padding: 12px; margin-bottom: 12px; border-left: 8px solid var(--stripe); }
 #pal-swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
 #pal-swatches label { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700;
@@ -152,7 +164,7 @@ footer a { color: var(--secondary); }
     <h2 class="sect">The map</h2>
     <label class="f"><span>Title</span><input type="text" id="f-title" placeholder="This week in Philly"></label>
     <label class="f"><span>Subtitle</span><input type="text" id="f-subtitle" placeholder="Nov 3–9"></label>
-    <label class="f"><span>Palette</span><select id="f-palette"></select></label>
+    <div class="f"><span>Palette</span><div id="pal-list"></div></div>
     <div class="btnrow"><button class="ghost tiny" id="pal-edit">Customise…</button></div>
     <div id="pal-panel" hidden>
       <div id="pal-swatches"></div>
@@ -1008,11 +1020,18 @@ $("reset").onclick = () => {
 for (const [id, k] of [["f-title","title"],["f-subtitle","subtitle"]]) {
   $(id).addEventListener("input", e => { S[k] = e.target.value; save(); });
 }
-$("f-palette").addEventListener("change", e => { S.palette = e.target.value; S.editing = false; renderAll(); });
+$("pal-list").addEventListener("click", e => {
+  const b = e.target.closest("[data-pal]"); if (!b) return;
+  S.palette = b.dataset.pal; S.editing = false;
+  $("pal-panel").hidden = true;
+  renderAll();
+});
 function paletteOptions() {
-  $("f-palette").innerHTML = Object.entries(PALETTES)
-    .map(([k, v]) => `<option value="${k}">${esc(v.label)}${CUSTOM[k] ? " ✎" : ""}</option>`).join("");
-  $("f-palette").value = S.palette;
+  $("pal-list").innerHTML = Object.entries(PALETTES).map(([k, v]) => `
+    <button class="palchip${k === S.palette ? " on" : ""}" data-pal="${k}" title="${esc(v.label)}">
+      <span class="sw"><i style="background:${esc(v.accent)}"></i><i style="background:${esc(v.stripe)}"></i><i style="background:${esc(v.secondary)}"></i><i style="background:${esc(v.tertiary)}"></i></span>
+      <b>${esc(v.label)}${CUSTOM[k] ? " ✎" : ""}</b>
+    </button>`).join("");
 }
 function renderSwatches() {
   $("pal-swatches").innerHTML = TOKENS.map(t =>
@@ -1037,13 +1056,15 @@ $("pal-save").onclick = () => {
   const name = ($("pal-name").value || "").trim();
   if (!name) return status("Give the palette a name first", true);
   const key = "my-" + slug(name);
+  const was = CUSTOM[S.palette] ? S.palette : null;
+  if (was && was !== key) { delete CUSTOM[was]; delete PALETTES[was]; }   // rename, don't clone
   CUSTOM[key] = { ...S.custom, label: name };
   PALETTES[key] = CUSTOM[key];
   try { localStorage.setItem(PKEY, JSON.stringify(CUSTOM)); } catch (e) {}
   S.palette = key; S.editing = false;
   $("pal-panel").hidden = true;
   paletteOptions(); renderAll();
-  status(`Saved “${name}”`);
+  status(was && was !== key ? `Renamed to “${name}”` : `Saved “${name}”`);
 };
 $("pal-del").onclick = () => {
   if (!CUSTOM[S.palette]) return;
