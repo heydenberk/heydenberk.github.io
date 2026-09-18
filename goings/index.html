@@ -93,6 +93,14 @@ button.accent { background: var(--accent); color: #fff; }
 .geostate { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
 .geostate.ok { color: #1f6f60; }
 .geostate.err { color: var(--accent); }
+.geostate.busy { color: var(--secondary); }
+button[disabled] { opacity: 0.45; cursor: default; }
+.spin {
+  display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 .rowtools { display: flex; gap: 5px; margin-top: 8px; }
 .rowtools .spacer { flex: 1; }
 
@@ -101,6 +109,14 @@ button.accent { background: var(--accent); color: #fff; }
 .cat input[type=color] { width: 34px; height: 30px; padding: 0; border: 2px solid var(--ink); background: none; cursor: pointer; }
 .cat input[type=text] { flex: 1; }
 
+#bulk { background: var(--bg); padding: 12px; margin-top: 10px; border-left: 8px solid var(--secondary); }
+#bulk textarea { font-size: 13px; margin-bottom: 10px; }
+#bulk-preview b { color: var(--ink); }
+#pal-panel { background: var(--bg); padding: 12px; margin-bottom: 12px; border-left: 8px solid var(--stripe); }
+#pal-swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+#pal-swatches label { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+#pal-swatches input { width: 34px; height: 26px; padding: 0; border: 2px solid var(--ink); background: none; cursor: pointer; }
 #map { height: 460px; border: 3px solid var(--ink); box-shadow: 8px 8px 0 var(--shadow); }
 .maptools { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 12px 0 0; }
 .toggle { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); cursor: pointer; }
@@ -137,6 +153,16 @@ footer a { color: var(--secondary); }
     <label class="f"><span>Title</span><input type="text" id="f-title" placeholder="This week in Philly"></label>
     <label class="f"><span>Subtitle</span><input type="text" id="f-subtitle" placeholder="Nov 3–9"></label>
     <label class="f"><span>Palette</span><select id="f-palette"></select></label>
+    <div class="btnrow"><button class="ghost tiny" id="pal-edit">Customise…</button></div>
+    <div id="pal-panel" hidden>
+      <div id="pal-swatches"></div>
+      <label class="f"><span>Save as</span><input type="text" id="pal-name" placeholder="My colours"></label>
+      <div class="btnrow">
+        <button class="tiny" id="pal-save">Save palette</button>
+        <button class="ghost tiny" id="pal-del">Delete</button>
+        <button class="ghost tiny" id="pal-close">Close</button>
+      </div>
+    </div>
     <label class="f"><span>Map style</span><select id="f-style"></select></label>
     <label class="f"><span>Frame</span><select id="f-frame">
       <option value="strip">Colour strip</option>
@@ -149,7 +175,23 @@ footer a { color: var(--secondary); }
     <div id="stops"></div>
     <div class="btnrow">
       <button id="add">+ Add stop</button>
+      <button class="ghost" id="bulk-open">Paste a list</button>
       <button class="ghost" id="geocode-all">Locate all</button>
+    </div>
+    <div id="bulk" hidden>
+      <textarea id="bulk-text" rows="7" placeholder="Reading Terminal Market&#10;Johnny Brenda's&#10;Clark Park&#10;&#10;…or paste columns straight out of a spreadsheet."></textarea>
+      <label class="f"><span>Columns</span><select id="bulk-delim">
+        <option value="auto">Auto-detect</option>
+        <option value="line">Whole line is a place</option>
+        <option value="tab">Tab-separated (spreadsheet)</option>
+        <option value="comma">Comma-separated</option>
+        <option value="pipe">Pipe |</option>
+      </select></label>
+      <div id="bulk-preview" class="note"></div>
+      <div class="btnrow">
+        <button id="bulk-add">Add these</button>
+        <button class="ghost" id="bulk-cancel">Cancel</button>
+      </div>
     </div>
     <p class="note">Paste an address, a venue name, or coordinates like <code>39.9533, -75.1588</code>.
       Addresses are looked up one at a time — always eyeball the match before trusting it.</p>
@@ -256,11 +298,17 @@ const PH = PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)];
 
 const COORD_RE = /^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/;
 const KEY = "goings.v1";
+const PKEY = "goings.palettes.v1";
+const TOKENS = ["bg", "card", "ink", "muted", "accent", "stripe", "secondary", "tertiary"];
+let CUSTOM = {};
+try { CUSTOM = JSON.parse(localStorage.getItem(PKEY) || "{}"); } catch (e) {}
+Object.assign(PALETTES, CUSTOM);
+const pal = () => (S.editing && S.custom) ? S.custom : (PALETTES[S.palette] || PALETTES.barragan);
 const blankStop = () => ({ name:"", where:"", lat:null, lng:null, cat:"other", when:"", note:"", url:"", group:"", city:"", geo:null, matched:"" });
 
 let S = {
   title: "", subtitle: "", palette: "barragan",
-  style: "plain", frame: "strip", mode: "all", radius: 25, route: false, numbers: true, key: true, size: "1200x800", format: "jpeg",
+  style: "plain", frame: "strip", editing: false, custom: null, mode: "all", radius: 25, route: false, numbers: true, key: true, size: "1200x800", format: "jpeg",
   open: 0,
   cats: DEFAULT_CATS.map(c => ({ ...c })),
   stops: [blankStop()],
@@ -277,17 +325,18 @@ function status(msg, isError) {
 }
 
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(S)); $("savestate").textContent = "saved"; } catch (e) {}
+  try { localStorage.setItem(KEY, JSON.stringify({ ...S, stops: S.stops.map(s => ({ ...s, busy: false })) })); $("savestate").textContent = "saved"; } catch (e) {}
 }
 function restore() {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) S = Object.assign(S, JSON.parse(raw));
+    S.editing = false;   // transient: never resume mid-edit without the panel open
   } catch (e) {}
 }
 
 function applyPalette() {
-  const p = PALETTES[S.palette] || PALETTES.barragan;
+  const p = pal();
   for (const k of ["bg","card","ink","muted","accent","stripe","secondary","tertiary"]) {
     document.documentElement.style.setProperty("--" + k, p[k]);
   }
@@ -329,6 +378,8 @@ function renderStops() {
       ? `<div class="geostate ok">✓ ${esc(s.matched || (s.lat.toFixed(4) + ", " + s.lng.toFixed(4)))}</div>`
       : s.geo === "err" ? `<div class="geostate err">✗ not found — try a fuller address, or paste coordinates</div>`
       : `<div class="geostate">Enter a place, then Locate — the rest opens up after</div>`;
+    const busy = `<div class="geostate busy"><span class="spin"></span>Looking up “${esc(s.where || "")}”…</div>`;
+    const locateBtn = cls => `<button class="${cls}" data-geo="${i}"${s.busy ? " disabled" : ""}>${s.busy ? "Locating" : "Locate"}</button>`;
 
     // a new stop asks for one thing: where it is. Everything else waits for the match.
     if (s.geo !== "ok") {
@@ -338,9 +389,9 @@ function renderStops() {
           ${badge}
           <input type="text" placeholder="${esc(PH.where)} — or 39.9533, -75.1588"
                  value="${esc(s.where)}" data-i="${i}" data-k="where" data-enter="${i}" autofocus>
-          <button class="tiny" data-geo="${i}">Locate</button>
+          ${locateBtn("tiny")}
         </div>
-        ${geo}
+        ${s.busy ? busy : geo}
         <div class="rowtools"><span class="spacer"></span><button class="ghost tiny" data-del="${i}">×</button></div>
       </div>`;
     }
@@ -360,9 +411,9 @@ function renderStops() {
         <input type="url" placeholder="Link" value="${esc(s.url)}" data-i="${i}" data-k="url">
         <input class="wide" type="text" placeholder="One-line note" value="${esc(s.note)}" data-i="${i}" data-k="note">
       </div>
-      ${geo}
+      ${s.busy ? busy : geo}
       <div class="rowtools">
-        <button class="ghost tiny" data-geo="${i}">Locate</button>
+        ${locateBtn("ghost tiny")}
         <button class="ghost tiny" data-shut="${i}">Done</button>
         <span class="spacer"></span>
         <button class="ghost tiny" data-up="${i}">↑</button>
@@ -490,6 +541,44 @@ function loadImg(url) {
   });
 }
 
+/* ---------- bulk paste ---------- */
+const BULK_HEADERS = {
+  name:  ["name", "event", "what", "title", "thing"],
+  where: ["where", "address", "location", "venue", "place", "addr"],
+  when:  ["when", "date", "time", "day", "dates"],
+  note:  ["note", "notes", "description", "detail", "details", "about"],
+  cat:   ["category", "cat", "type", "kind"],
+  url:   ["link", "url", "website", "tickets", "site"],
+};
+function parseBulk(text, delim) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  let mode = delim;
+  if (mode === "auto") {
+    // commas are never auto-picked: addresses are full of them
+    mode = text.includes("\t") ? "tab" : text.includes("|") ? "pipe" : "line";
+  }
+  const cut = { tab: l => l.split("\t"), comma: l => l.split(","), pipe: l => l.split("|"), line: l => [l] }[mode];
+  let rows = lines.map(l => cut(l).map(c => c.trim()));
+
+  // a header row wins over positional guessing
+  let cols = null;
+  const head = rows[0].map(c => c.toLowerCase().replace(/[^a-z]/g, ""));
+  const guess = head.map(c => Object.keys(BULK_HEADERS).find(k => BULK_HEADERS[k].includes(c)) || null);
+  if (guess.filter(Boolean).length >= 2) { cols = guess; rows = rows.slice(1); }
+  if (!cols) cols = rows[0] && rows[0].length === 1 ? ["where"] : ["name", "where", "when", "note", "cat", "url"];
+
+  const known = S.cats.map(c => c.name.toLowerCase());
+  return rows.filter(r => r.some(Boolean)).map(r => {
+    const st = blankStop();
+    r.forEach((v, i) => { const k = cols[i]; if (k && v) st[k] = v; });
+    if (!st.where && st.name) st.where = st.name;      // a bare list is a list of places
+    if (st.cat && !known.includes(st.cat.toLowerCase())) st.cat = "other";
+    else if (st.cat) st.cat = S.cats[known.indexOf(st.cat.toLowerCase())].name;
+    return st;
+  });
+}
+
 /* ---------- grouping: one map, one per stop, or one per cluster ---------- */
 function km(a, b) {
   const R = 6371, r = Math.PI / 180;
@@ -549,7 +638,7 @@ function exportGroups() {
 
 /* ---------- PNG ---------- */
 async function renderImage(pts, TITLE, SUBTITLE) {
-  const P = PALETTES[S.palette] || PALETTES.barragan;
+  const P = pal();
   const [W, MAPH] = S.size.split("x").map(Number);
   const SC = 2, pad = 28, strip = 8;
   const titleH = (TITLE || SUBTITLE) ? 70 : 12;
@@ -753,7 +842,7 @@ async function exportHTML() {
     fetch("vendor/leaflet.css").then(r => r.text()),
     fetch("vendor/leaflet.js").then(r => r.text()),
   ]);
-  const P = PALETTES[S.palette] || PALETTES.barragan;
+  const P = pal();
   const data = JSON.stringify({
     title: S.title, subtitle: S.subtitle, route: S.route, numbers: S.numbers,
     pts: pts.map(p => ({ name: p.name, lat: p.lat, lng: p.lng, when: p.when, note: p.note, url: p.url, color: catColor(p.cat) })),
@@ -837,10 +926,15 @@ $("stops").addEventListener("click", async e => {
   else if (d.up != null && +d.up > 0) { const i = +d.up; [S.stops[i - 1], S.stops[i]] = [S.stops[i], S.stops[i - 1]]; }
   else if (d.down != null && +d.down < S.stops.length - 1) { const i = +d.down; [S.stops[i + 1], S.stops[i]] = [S.stops[i], S.stops[i + 1]]; }
   else if (d.geo != null) {
-    S.open = +d.geo;
+    const i = +d.geo;
+    if (S.stops[i].busy) return;
+    S.open = i;
+    S.stops[i].busy = true;
+    renderAll();
     status("Looking up…");
-    await geocodeOne(+d.geo);
-    status(S.stops[+d.geo].geo === "ok" ? "Located — check the match" : "No match found", S.stops[+d.geo].geo !== "ok");
+    await geocodeOne(i);
+    S.stops[i].busy = false;
+    status(S.stops[i].geo === "ok" ? "Located — check the match" : "No match found", S.stops[i].geo !== "ok");
   }
   renderAll();
   if (d.geo != null && S.stops[+d.geo] && S.stops[+d.geo].geo === "ok") {
@@ -857,16 +951,45 @@ $("cats").addEventListener("click", e => {
   const b = e.target.closest("button[data-delcat]"); if (!b) return;
   S.cats.splice(+b.dataset.delcat, 1); renderAll();
 });
+$("bulk-open").onclick = () => { $("bulk").hidden = !$("bulk").hidden; if (!$("bulk").hidden) $("bulk-text").focus(); };
+$("bulk-cancel").onclick = () => { $("bulk").hidden = true; $("bulk-text").value = ""; $("bulk-preview").textContent = ""; };
+function bulkPreview() {
+  const got = parseBulk($("bulk-text").value, $("bulk-delim").value);
+  if (!got.length) { $("bulk-preview").textContent = ""; $("bulk-add").disabled = true; return; }
+  $("bulk-add").disabled = false;
+  const show = got.slice(0, 3).map(g => (g.name || g.where) + (g.when ? " — " + g.when : "")).join(" · ");
+  $("bulk-preview").innerHTML = `<b>${got.length} stop${got.length > 1 ? "s" : ""}</b> — ${esc(show)}${got.length > 3 ? " …" : ""}`;
+}
+$("bulk-text").addEventListener("input", bulkPreview);
+$("bulk-delim").addEventListener("change", bulkPreview);
+$("bulk-add").onclick = () => {
+  const got = parseBulk($("bulk-text").value, $("bulk-delim").value);
+  if (!got.length) return;
+  // drop a lone untouched blank row rather than leaving it above the import
+  if (S.stops.length === 1 && !S.stops[0].where && !S.stops[0].name) S.stops = [];
+  S.stops.push(...got);
+  S.open = -1;
+  $("bulk").hidden = true; $("bulk-text").value = ""; $("bulk-preview").textContent = "";
+  renderAll();
+  status(`Added ${got.length} — now hit Locate all`);
+};
+
 $("add").onclick = () => { S.stops.push(blankStop()); S.open = S.stops.length - 1; renderAll(); };
 $("add-cat").onclick = () => { S.cats.push({ name: "new", color: "#6b6257" }); renderAll(); };
 $("geocode-all").onclick = async () => {
+  const lock = on => { $("geocode-all").disabled = on; $("add").disabled = on; $("geocode-all").textContent = on ? "Locating…" : "Locate all"; };
+  lock(true);
   for (let i = 0; i < S.stops.length; i++) {
     if (S.stops[i].lat != null) continue;
     status(`Looking up ${i + 1} of ${S.stops.length}…`);
+    S.stops[i].busy = true;
+    renderAll();
     await geocodeOne(i);
+    S.stops[i].busy = false;
     renderAll();
     await new Promise(r => setTimeout(r, 400));   // be a good neighbour to a free service
   }
+  lock(false);
   status("Done — check each match before you publish");
 };
 $("png").onclick = () => exportImages().catch(e => status("Export failed: " + e.message, true));
@@ -885,7 +1008,53 @@ $("reset").onclick = () => {
 for (const [id, k] of [["f-title","title"],["f-subtitle","subtitle"]]) {
   $(id).addEventListener("input", e => { S[k] = e.target.value; save(); });
 }
-$("f-palette").addEventListener("change", e => { S.palette = e.target.value; renderAll(); });
+$("f-palette").addEventListener("change", e => { S.palette = e.target.value; S.editing = false; renderAll(); });
+function paletteOptions() {
+  $("f-palette").innerHTML = Object.entries(PALETTES)
+    .map(([k, v]) => `<option value="${k}">${esc(v.label)}${CUSTOM[k] ? " ✎" : ""}</option>`).join("");
+  $("f-palette").value = S.palette;
+}
+function renderSwatches() {
+  $("pal-swatches").innerHTML = TOKENS.map(t =>
+    `<label>${t}<input type="color" value="${esc(S.custom[t])}" data-token="${t}"></label>`).join("");
+  $("pal-del").hidden = !CUSTOM[S.palette];
+}
+$("pal-edit").onclick = () => {
+  S.editing = true;
+  S.custom = { ...pal() };
+  $("pal-panel").hidden = false;
+  $("pal-name").value = CUSTOM[S.palette] ? pal().label : "";
+  renderSwatches();
+  renderAll();
+};
+$("pal-close").onclick = () => { S.editing = false; $("pal-panel").hidden = true; renderAll(); };
+$("pal-swatches").addEventListener("input", e => {
+  const t = e.target.dataset.token; if (!t) return;
+  S.custom[t] = e.target.value;
+  renderAll();
+});
+$("pal-save").onclick = () => {
+  const name = ($("pal-name").value || "").trim();
+  if (!name) return status("Give the palette a name first", true);
+  const key = "my-" + slug(name);
+  CUSTOM[key] = { ...S.custom, label: name };
+  PALETTES[key] = CUSTOM[key];
+  try { localStorage.setItem(PKEY, JSON.stringify(CUSTOM)); } catch (e) {}
+  S.palette = key; S.editing = false;
+  $("pal-panel").hidden = true;
+  paletteOptions(); renderAll();
+  status(`Saved “${name}”`);
+};
+$("pal-del").onclick = () => {
+  if (!CUSTOM[S.palette]) return;
+  const gone = PALETTES[S.palette].label;
+  delete CUSTOM[S.palette]; delete PALETTES[S.palette];
+  try { localStorage.setItem(PKEY, JSON.stringify(CUSTOM)); } catch (e) {}
+  S.palette = "barragan"; S.editing = false;
+  $("pal-panel").hidden = true;
+  paletteOptions(); renderAll();
+  status(`Deleted “${gone}”`);
+};
 $("f-style").addEventListener("change", e => { S.style = e.target.value; renderAll(); });
 $("f-frame").addEventListener("change", e => { S.frame = e.target.value; save(); });
 $("f-mode").addEventListener("change", e => { S.mode = e.target.value; renderAll(); });
@@ -905,13 +1074,12 @@ for (const [id, k] of [["t-route","route"],["t-numbers","numbers"],["t-key","key
 
 function syncFields() {
   $("f-title").value = S.title; $("f-subtitle").value = S.subtitle;
-  $("f-palette").value = S.palette; $("f-style").value = S.style; $("f-frame").value = S.frame;
+  paletteOptions(); $("f-style").value = S.style; $("f-frame").value = S.frame;
   $("f-mode").value = S.mode; $("f-radius").value = S.radius; $("f-size").value = S.size; $("f-format").value = S.format;
   $("t-route").checked = S.route; $("t-numbers").checked = S.numbers; $("t-key").checked = S.key;
 }
 
 /* ---------- start ---------- */
-$("f-palette").innerHTML = Object.entries(PALETTES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
 $("f-style").innerHTML = Object.entries(STYLES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
 restore();
 syncFields();
