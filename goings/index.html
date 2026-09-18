@@ -328,7 +328,22 @@ function renderStops() {
     const geo = s.geo === "ok"
       ? `<div class="geostate ok">✓ ${esc(s.matched || (s.lat.toFixed(4) + ", " + s.lng.toFixed(4)))}</div>`
       : s.geo === "err" ? `<div class="geostate err">✗ not found — try a fuller address, or paste coordinates</div>`
-      : `<div class="geostate">not located yet</div>`;
+      : `<div class="geostate">Enter a place, then Locate — the rest opens up after</div>`;
+
+    // a new stop asks for one thing: where it is. Everything else waits for the match.
+    if (s.geo !== "ok") {
+      return `
+      <div class="stop unplaced" style="border-left-color:${esc(col)}">
+        <div class="stophead">
+          ${badge}
+          <input type="text" placeholder="${esc(PH.where)} — or 39.9533, -75.1588"
+                 value="${esc(s.where)}" data-i="${i}" data-k="where" data-enter="${i}" autofocus>
+          <button class="tiny" data-geo="${i}">Locate</button>
+        </div>
+        ${geo}
+        <div class="rowtools"><span class="spacer"></span><button class="ghost tiny" data-del="${i}">×</button></div>
+      </div>`;
+    }
     return `
     <div class="stop${s.lat == null ? " unplaced" : ""}" style="border-left-color:${esc(col)}">
       <div class="stophead">
@@ -440,6 +455,10 @@ async function geocodeOne(i) {
     const p = f.properties || {};
     s.matched = [p.name, p.street, p.city, p.state, p.country].filter(Boolean).join(", ");
     s.city = p.city || p.town || p.village || p.county || "";
+    // first entry is just a location; the match names it
+    if (!(s.name || "").trim()) {
+      s.name = p.name || [p.housenumber, p.street].filter(Boolean).join(" ") || s.city || q;
+    }
     s.geo = "ok";
     return true;
   } catch (e) { s.geo = "err"; return false; }
@@ -796,6 +815,12 @@ $("stops").addEventListener("input", e => {
   save();
 });
 $("stops").addEventListener("change", () => renderAll());
+$("stops").addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.target.dataset.enter == null) return;
+  e.preventDefault();
+  const b = e.target.closest(".stop").querySelector("[data-geo]");
+  if (b) b.click();
+});
 $("stops").addEventListener("click", e => {
   const row = e.target.closest(".stop.shut");
   if (row && !e.target.closest("button")) { S.open = +row.dataset.open; renderAll(); }
@@ -818,6 +843,10 @@ $("stops").addEventListener("click", async e => {
     status(S.stops[+d.geo].geo === "ok" ? "Located — check the match" : "No match found", S.stops[+d.geo].geo !== "ok");
   }
   renderAll();
+  if (d.geo != null && S.stops[+d.geo] && S.stops[+d.geo].geo === "ok") {
+    const el = document.querySelector(`[data-i="${+d.geo}"][data-k="name"]`);
+    if (el) { el.focus(); el.select(); }
+  }
 });
 $("cats").addEventListener("input", e => {
   const i = e.target.dataset.cat; if (i == null) return;
