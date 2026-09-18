@@ -134,8 +134,8 @@ footer a { color: var(--secondary); }
 <div class="wrap">
   <div class="panel">
     <h2 class="sect">The map</h2>
-    <label class="f"><span>Title</span><input type="text" id="f-title" placeholder="This week upstate"></label>
-    <label class="f"><span>Subtitle</span><input type="text" id="f-subtitle" placeholder="Nov 3–9 · Hudson Valley"></label>
+    <label class="f"><span>Title</span><input type="text" id="f-title" placeholder="This week in Philly"></label>
+    <label class="f"><span>Subtitle</span><input type="text" id="f-subtitle" placeholder="Nov 3–9"></label>
     <label class="f"><span>Palette</span><select id="f-palette"></select></label>
     <label class="f"><span>Map style</span><select id="f-style"></select></label>
     <label class="f"><span>Frame</span><select id="f-frame">
@@ -151,7 +151,7 @@ footer a { color: var(--secondary); }
       <button id="add">+ Add stop</button>
       <button class="ghost" id="geocode-all">Locate all</button>
     </div>
-    <p class="note">Paste an address, a venue name, or coordinates like <code>42.2519, -73.7987</code>.
+    <p class="note">Paste an address, a venue name, or coordinates like <code>39.9533, -75.1588</code>.
       Addresses are looked up one at a time — always eyeball the match before trusting it.</p>
 
     <h2 class="sect">Categories</h2>
@@ -211,7 +211,7 @@ footer a { color: var(--secondary); }
 <script>
 const PALETTES = {
   barragan: { label: "Barragán",  bg:"#f3eada", card:"#f9f2e4", ink:"#2a2117", muted:"#6b5f4f", accent:"#c2410c", stripe:"#f3a712", secondary:"#2d3e9e", tertiary:"#e8641b" },
-  hudson:   { label: "Hudson",    bg:"#f4f0e6", card:"#fbf8f0", ink:"#23281f", muted:"#5f6357", accent:"#9c3d2e", stripe:"#d9a441", secondary:"#3a5a6b", tertiary:"#a8592c" },
+  brick:    { label: "Brick",     bg:"#f4f0e6", card:"#fbf8f0", ink:"#23281f", muted:"#5f6357", accent:"#9c3d2e", stripe:"#d9a441", secondary:"#3a5a6b", tertiary:"#a8592c" },
   cenote:   { label: "Cenote",    bg:"#f4f1e8", card:"#fbf8ef", ink:"#22281f", muted:"#5f6357", accent:"#0e7c86", stripe:"#f0b429", secondary:"#235789", tertiary:"#c2703d" },
   press:    { label: "Newsprint", bg:"#f2f1ed", card:"#ffffff", ink:"#1b1b1a", muted:"#6a6a67", accent:"#b3261e", stripe:"#8a8a85", secondary:"#2f4858", tertiary:"#57534e" },
 };
@@ -243,6 +243,17 @@ const DEFAULT_CATS = [
   { name: "community", color: "#1f6f60" },
   { name: "other",     color: "#6b6257" },
 ];
+// placeholders rotate so the empty state suggests the shape without pre-filling anything
+const PLACEHOLDERS = [
+  { name: "Reading Terminal Market",   where: "51 N 12th St, Philadelphia",        when: "Sat 9–5" },
+  { name: "Johnny Brenda's",           where: "1201 Frankford Ave, Philadelphia",  when: "Fri 9pm" },
+  { name: "Eastern State Penitentiary",where: "2027 Fairmount Ave, Philadelphia",  when: "daily" },
+  { name: "Bartram's Garden",          where: "5400 Lindbergh Blvd, Philadelphia", when: "Sun 10–4" },
+  { name: "The Barnes Foundation",     where: "2025 Benjamin Franklin Pkwy",       when: "Wed–Mon" },
+  { name: "Clark Park",                where: "43rd & Baltimore Ave, Philadelphia",when: "Sat market" },
+];
+const PH = PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)];
+
 const COORD_RE = /^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/;
 const KEY = "goings.v1";
 const blankStop = () => ({ name:"", where:"", lat:null, lng:null, cat:"other", when:"", note:"", url:"", group:"", city:"", geo:null, matched:"" });
@@ -322,14 +333,14 @@ function renderStops() {
     <div class="stop${s.lat == null ? " unplaced" : ""}" style="border-left-color:${esc(col)}">
       <div class="stophead">
         ${badge}
-        <input type="text" placeholder="What is it? (Basilica Hudson)" value="${esc(s.name)}" data-i="${i}" data-k="name">
+        <input type="text" placeholder="${esc(PH.name)}" value="${esc(s.name)}" data-i="${i}" data-k="name">
       </div>
       <div class="stopgrid">
-        <input class="wide" type="text" placeholder="Address, venue, or 42.25, -73.79" value="${esc(s.where)}" data-i="${i}" data-k="where">
+        <input class="wide" type="text" placeholder="${esc(PH.where)} — or 39.9533, -75.1588" value="${esc(s.where)}" data-i="${i}" data-k="where">
         <select data-i="${i}" data-k="cat">
           ${opts.map(o => `<option${o === s.cat ? " selected" : ""}>${esc(o)}</option>`).join("")}
         </select>
-        <input type="text" placeholder="When (Sat 7pm)" value="${esc(s.when)}" data-i="${i}" data-k="when">
+        <input type="text" placeholder="${esc(PH.when)}" value="${esc(s.when)}" data-i="${i}" data-k="when">
         <input type="text" placeholder="Map group (optional)" value="${esc(s.group || "")}" data-i="${i}" data-k="group">
         <input type="url" placeholder="Link" value="${esc(s.url)}" data-i="${i}" data-k="url">
         <input class="wide" type="text" placeholder="One-line note" value="${esc(s.note)}" data-i="${i}" data-k="note">
@@ -380,7 +391,7 @@ function renderAll() {
 let map, layer, tiles, tilesFor;
 function drawMap() {
   const pts = placed();
-  if (!map) map = L.map("map", { scrollWheelZoom: false }).setView([42.25, -73.79], 9);
+  if (!map) map = L.map("map", { scrollWheelZoom: false }).setView([39.9526, -75.1652], 12);
   if (tilesFor !== S.style) {
     if (tiles) tiles.remove();
     tiles = L.tileLayer(style().url, { maxZoom: style().max, attribution: style().attr }).addTo(map);
@@ -871,22 +882,12 @@ function syncFields() {
 }
 
 /* ---------- start ---------- */
-const SAMPLE = {
-  title: "This week upstate", subtitle: "a sample — swap in your own",
-  stops: [
-    { ...blankStop(), name: "Basilica Hudson", where: "Basilica Hudson, Hudson NY", cat: "music", when: "Fri 8pm" },
-    { ...blankStop(), name: "Storm King Art Center", where: "Storm King Art Center, New Windsor NY", cat: "art", when: "Sat–Sun" },
-    { ...blankStop(), name: "Kingston Farmers Market", where: "Wall Street, Kingston NY", cat: "market", when: "Sat 9–2" },
-    { ...blankStop(), name: "Upstate Films", where: "Upstate Films, Rhinebeck NY", cat: "film", when: "nightly" },
-  ],
-};
 $("f-palette").innerHTML = Object.entries(PALETTES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
 $("f-style").innerHTML = Object.entries(STYLES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
-if (!localStorage.getItem(KEY)) Object.assign(S, SAMPLE);
 restore();
 syncFields();
 renderAll();
-if (!placed().length) status('Sample loaded — hit "Locate all" to place the pins');
+if (!placed().length) status("Add your first stop, then hit Locate");
 </script>
 </body>
 </html>
