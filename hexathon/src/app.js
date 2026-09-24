@@ -49,7 +49,10 @@ game ||= createGame();
 let pending = [], selected = null, exchanging = false, swapIds = new Set(), busy = false;
 let pan = { x: 0, y: 0 }, zoom = 1, hintGhost = [], toastTimer, computerTimer, generation = 0;
 let soundEnabled = false, audioContext, storageWarning = false;
+let scorePreviewEnabled = true, previewCell = null;
 try { soundEnabled = localStorage.getItem('qwirkle-sound') === 'true'; } catch { /* Optional setting. */ }
+try { scorePreviewEnabled = localStorage.getItem('hexathon-score-preview') !== 'false'; } catch { /* Optional setting. */ }
+$('score-preview-toggle').checked = scorePreviewEnabled;
 const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
 let requestNumber = 0;
 const requests = new Map();
@@ -117,12 +120,15 @@ function combinedBoard() {
   return board;
 }
 function opening() { return Object.keys(game.board).length === 0; }
+function finishingBonus(placements) {
+  return !game.bag.length && placements.length === game.players[0].rack.length ? 6 : 0;
+}
 function turnValidation() {
   const result = validateMove(game.board, pending);
   if (result.valid && opening() && pending.length !== openingSize(game.players[0].rack)) {
     return { ...result, valid: false, error: `Start with your largest matching set: ${openingSize(game.players[0].rack)} tiles.` };
   }
-  return result;
+  return { ...result, score: result.score + (result.valid ? finishingBonus(pending) : 0) };
 }
 function render() {
   const focused = document.activeElement;
@@ -179,6 +185,7 @@ function position(x, y) {
   return { left: width / 2 + pan.x + x * cell - cell / 2, top: height / 2 + pan.y + y * cell - cell / 2, cell };
 }
 function renderBoard() {
+  hideScorePreview();
   const board = combinedBoard();
   const tile = game.players[0].rack.find(t => t.id === selected);
   const fresh = !Object.keys(board).length;
@@ -223,6 +230,52 @@ function renderBoard() {
     html += cellHtml(p.x, p.y, 'space ghost', `<span style="color:${colorValues[p.tile.color]};width:100%;height:100%;display:flex;align-items:center;justify-content:center">${shape(p.tile.shape)}</span>`, `Suggested ${tileLabel(p.tile)} at ${p.x}, ${p.y}`, 'title="Build toward this space"');
   }
   $('tiles-layer').innerHTML = html;
+}
+function hideScorePreview() {
+  if (previewCell) {
+    previewCell.classList.remove('hover-preview');
+    previewCell.removeAttribute('aria-describedby');
+    previewCell.querySelector('.hover-tile')?.remove();
+    previewCell = null;
+  }
+  $('placement-preview').hidden = true;
+}
+function showScorePreview(cell) {
+  if (!scorePreviewEnabled || !playable() || exchanging || !cell?.matches('.board-cell.space')) {
+    hideScorePreview();
+    return;
+  }
+  if (cell === previewCell) return;
+  hideScorePreview();
+  const tile = game.players[0].rack.find(t => t.id === selected);
+  if (!tile) return;
+  const x = Number(cell.dataset.x), y = Number(cell.dataset.y);
+  const placements = [...pending, { x, y, tile }];
+  const result = validateMove(game.board, placements);
+  if (!result.valid) return;
+  const bonus = finishingBonus(placements);
+  const score = result.score + bonus;
+  const remaining = opening() ? openingSize(game.players[0].rack) - placements.length : 0;
+  $('hover-score').textContent = `+${score} ${score === 1 ? 'point' : 'points'}`;
+  $('hover-detail').textContent = remaining > 0 ? `Opening so far · add ${remaining} matching ${remaining === 1 ? 'tile' : 'tiles'}` : `Turn total · ${placements.length} ${placements.length === 1 ? 'tile' : 'tiles'}`;
+  const bonuses = [];
+  if (result.qwirkles) bonuses.push(`${result.qwirkles * 6}-point line bonus`);
+  if (bonus) bonuses.push('6-point finish bonus');
+  $('hover-bonus').textContent = bonuses.length ? `Includes ${bonuses.join(' + ')}` : '';
+  $('hover-bonus').hidden = !bonuses.length;
+  previewCell = cell;
+  cell.classList.add('hover-preview');
+  cell.setAttribute('aria-describedby', 'placement-preview');
+  cell.insertAdjacentHTML('beforeend', `<span class="hover-tile" style="color:${colorValues[tile.color]}">${shape(tile.shape)}</span>`);
+  const tooltip = $('placement-preview');
+  tooltip.hidden = false;
+  const spot = position(x, y);
+  const left = Math.max(10, Math.min($('board').clientWidth - tooltip.offsetWidth - 10, spot.left + spot.cell / 2 - tooltip.offsetWidth / 2));
+  let top = spot.top - tooltip.offsetHeight - 9;
+  if (top < 10) top = spot.top + spot.cell + 9;
+  top = Math.max(10, Math.min($('board').clientHeight - tooltip.offsetHeight - 10, top));
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
 }
 function renderActivity() {
   if (!game.log.length) {
@@ -335,9 +388,24 @@ function showEnd() {
 }
 
 $('rack').addEventListener('click', event => { const tile = event.target.closest('[data-tile]'); if (tile) selectTile(tile.dataset.tile); });
+$('score-preview-toggle').addEventListener('change', event => {
+  scorePreviewEnabled = event.target.checked;
+  hideScorePreview();
+  try { localStorage.setItem('hexathon-score-preview', String(scorePreviewEnabled)); } catch { /* Optional setting. */ }
+});
+$('board').addEventListener('pointerover', event => {
+  if (event.pointerType !== 'touch') showScorePreview(event.target.closest('.board-cell.space'));
+});
+$('board').addEventListener('pointerout', event => {
+  if (previewCell && !previewCell.contains(event.relatedTarget)) hideScorePreview();
+});
+$('board').addEventListener('pointerleave', hideScorePreview);
+$('board').addEventListener('focusin', event => showScorePreview(event.target.closest('.board-cell.space')));
+$('board').addEventListener('focusout', hideScorePreview);
 let drag = null, didDrag = false;
 $('board').addEventListener('pointerdown', event => {
-  if (event.target.closest('button')) return;
+  if (event.target.closest('button, label, input')) return;
+  hideScorePreview();
   drag = { x: event.clientX, y: event.clientY, startX: pan.x, startY: pan.y };
   didDrag = false; $('board').setPointerCapture(event.pointerId);
 });
@@ -392,6 +460,7 @@ document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('c
 }));
 document.addEventListener('keydown', event => {
   if (document.querySelector('dialog[open]') || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target.matches('input, select, textarea, a')) return;
   if (event.key >= '1' && event.key <= '6') { const tile = game.players[0].rack[Number(event.key) - 1]; if (tile) { event.preventDefault(); selectTile(tile.id); } }
   else if (event.key === 'Escape') { event.preventDefault(); undo(); }
   else if (event.key === 'Enter' && event.target.tagName !== 'BUTTON' && !$('play-button').disabled) { event.preventDefault(); commit(); }
