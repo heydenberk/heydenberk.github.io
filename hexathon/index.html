@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f7f2" />
+    <meta name="description" content="A little color. A little strategy. Play Hexathon, a free, relaxed tile game against Cleo, your friendly computer opponent." />
+    <title>Hexathon — A little pattern play</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Hexathon home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>hexathon<span class="brand-dot">.</span></span></a>
+      <span class="brand-tagline">A little pattern play.</span>
+      <nav aria-label="Game options">
+        <button class="text-button" id="help-button"><span data-icon="help"></span><span>How to play</span></button>
+        <button class="icon-button sound-button" id="sound-button" aria-label="Turn sound on" aria-pressed="false"><span data-icon="sound-off"></span></button>
+        <span class="nav-divider"></span>
+        <button class="button button-dark button-small" id="new-button"><span data-icon="plus"></span>New game</button>
+      </nav>
+    </header>
+
+    <main class="app-shell">
+      <section class="intro">
+        <div><p class="eyebrow"><span class="little-line"></span> MAKE A LITTLE ROOM FOR PLAY</p><h1>Good things come in <span>patterns.</span></h1><p class="intro-copy">Match a color. Find a shape. Make your next move.</p></div>
+        <div class="intro-art" aria-hidden="true"><span class="art-tile art-one"></span><span class="art-tile art-two"></span><span class="art-tile art-three"></span><svg class="art-spark" viewBox="0 0 30 30"><path d="M15 2v26M2 15h26M6 6l18 18M6 24 24 6" /></svg></div>
+      </section>
+
+      <div class="game-layout">
+        <section class="play-area" aria-label="Game table">
+          <div class="board-card">
+            <div class="board-topbar"><div class="table-label"><span class="status-dot"></span><span id="table-status">Your table</span><span class="table-pill">VS. CLEO</span></div><div class="bag-label"><span data-icon="bag"></span><span><b id="bag-count">96</b> in the bag</span></div></div>
+            <div id="board" class="board" role="region" aria-label="Game board. Select a rack tile, then a highlighted space. Drag the background to pan." tabindex="0">
+              <div id="grid-layer" class="grid-layer"></div>
+              <div id="tiles-layer" class="tiles-layer"></div>
+              <div id="board-empty" class="board-empty"><span class="empty-eyebrow">A FRESH START</span><h2>Every pattern starts<br>with a little possibility.</h2><p>Select a tile below, then place it here.</p><span class="empty-arrow" data-icon="arrow-down"></span></div>
+              <div class="board-bottom"><span class="pan-note"><span data-icon="move"></span>Drag to explore</span><div class="board-tools"><button class="icon-button" id="zoom-out" aria-label="Zoom out"><span data-icon="minus"></span></button><span id="zoom-label">100%</span><button class="icon-button" id="zoom-in" aria-label="Zoom in"><span data-icon="plus"></span></button><span class="tool-divider"></span><button class="icon-button" id="recenter" aria-label="Fit tiles to board" title="Fit tiles to board"><span data-icon="focus"></span></button></div></div>
+            </div>
+            <div class="turn-bar"><div class="turn-message"><span class="turn-indicator" id="turn-indicator" data-icon="sparkle"></span><span id="turn-message" role="status" aria-live="polite">Your move. Make it a good one.</span></div><span class="turn-number" id="turn-number">TURN 01</span></div>
+          </div>
+
+          <section class="rack-card" aria-label="Your tiles">
+            <div class="rack-topline"><div><h2>Your tiles <span id="rack-count">6</span></h2><p id="rack-instruction">Pick a tile. Find its people.</p></div><button class="text-button shuffle-button" id="shuffle-button"><span data-icon="shuffle"></span>Shuffle</button></div>
+            <div class="rack-row"><div id="rack" class="rack" role="group" aria-label="Tile rack"></div><div class="rack-action"><button class="button button-coral" id="play-button" disabled>Play tiles <span data-icon="arrow-right"></span></button><span id="move-preview">Your next great move awaits</span></div></div>
+            <div class="rack-bottom"><button class="text-button" id="exchange-button"><span data-icon="exchange"></span><span>Swap tiles</span></button><span class="rack-divider"></span><button class="text-button" id="undo-button" disabled><span data-icon="undo"></span>Undo</button><button class="text-button hint-button" id="hint-button"><span data-icon="bulb"></span>A little hint</button></div>
+          </section>
+        </section>
+
+        <aside class="sidebar">
+          <section class="score-card"><div class="section-label">A FRIENDLY COMPETITION <span data-icon="trophy"></span></div><div class="player-row" id="player-you"><span class="avatar avatar-you"><span data-icon="smile"></span></span><div class="player-detail"><strong>You <span class="you-badge">THAT’S YOU</span></strong><span id="you-status">Finding your rhythm</span></div><strong class="score" id="you-score">0</strong></div><div class="score-divider"></div><div class="player-row" id="player-cleo"><span class="avatar avatar-cleo"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 13 6 5l8 5h4l8-5-1 8v8c-3 9-15 9-18 0Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/><circle cx="21" cy="18" r="1.4" fill="currentColor"/><path d="m15 22 1.5 1.5L18 22" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span><div class="player-detail"><strong>Cleo <span class="bot-badge">BOT</span></strong><span id="cleo-status">Your pattern pal</span></div><strong class="score" id="cleo-score">0</strong></div><div class="score-note"><span class="tiny-dot"></span><span id="score-note">A good time, one tile at a time.</span></div></section>
+
+          <section class="tip-card"><div class="section-label"><span data-icon="sparkle"></span> SMALL TIP, BIG POSSIBILITIES</div><h2>Six is the magic number.</h2><p>Complete a line of six unique tiles.<br> That’s a full line — and <strong>12 points.</strong></p><div class="example-line" id="example-line" aria-hidden="true"></div><div class="tip-bottom"><span>One shape. Every color.</span><span class="point-badge">+12</span></div></section>
+
+          <section class="activity-card"><div class="section-label">THE STORY SO FAR <span data-icon="history"></span></div><div id="activity" class="activity" aria-live="polite"><div class="activity-empty"><span class="activity-empty-icon" data-icon="leaf"></span><p>A clean slate.<br><span>Let’s see what you make of it.</span></p></div></div></section>
+          <div class="sidebar-footer"><span data-icon="heart"></span> No rush. Just one good move at a time.</div>
+        </aside>
+      </div>
+      <footer class="site-footer"><span>Less scrolling. More connecting.</span><span>6 colors <i>·</i> 6 shapes <i>·</i> Endless possibilities</span><span class="footer-shapes" aria-hidden="true">● ◆ ✳</span></footer>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <dialog id="help-dialog" class="modal"><button class="icon-button modal-close" data-close="help-dialog" aria-label="Close instructions"><span data-icon="close"></span></button><p class="eyebrow">A MINUTE TO LEARN. A WHILE TO MASTER.</p><h2>Let’s connect the dots.<br><span>And the squares.</span></h2><div class="rules"><div><span class="rule-number">01</span><div><h3>Find something in common.</h3><p>A line shares one color or one shape. Each tile in that line must be different. Six tiles is the maximum.</p><div id="rule-example" class="rule-example" aria-hidden="true"></div></div></div><div><span class="rule-number">02</span><div><h3>Make your move.</h3><p>Select a rack tile, then a highlighted space. Play one or more tiles in one connected row or column. Every touching line must be valid. Click a staged tile to take it back.</p></div></div><div><span class="rule-number">03</span><div><h3>Make it count.</h3><p>Score each tile in every line you create or extend. A full line of six earns 12 points. Use all your tiles after the bag empties for a final 6-point bonus.</p></div></div></div><div class="rules-note"><strong>A few table rules</strong><p>The largest matching hand starts; ties go to you. Start with that full set. Swap tiles instead of playing to refresh your hand. When the bag is empty, pass only if you have no move; two passes end the game. Highest score wins.</p></div><p class="keyboard-note"><kbd>1</kbd>–<kbd>6</kbd> Select a tile <span>·</span> <kbd>Enter</kbd> Play <span>·</span> <kbd>Esc</kbd> Undo</p><button class="button button-coral modal-primary" data-close="help-dialog">Got it. Let’s play <span data-icon="arrow-right"></span></button><p class="credit">Hexathon is an independent tribute to Qwirkle, designed by Susan McKinley Ross. <a href="https://www.mindware.orientaltrading.com/pdf/instructions/52132.pdf" target="_blank" rel="noopener noreferrer">Original rules ↗</a></p></dialog>
+
+    <dialog id="new-dialog" class="modal compact-modal"><button class="icon-button modal-close" data-close="new-dialog" aria-label="Close new game"><span data-icon="close"></span></button><span class="modal-symbol" data-icon="shuffle"></span><p class="eyebrow">A FRESH PERSPECTIVE</p><h2>A new table.<br>New possibilities.</h2><p class="modal-copy">Shuffle all 108 tiles and start a new game with Cleo. Your current game will be replaced.</p><div class="modal-actions"><button class="button button-light" data-close="new-dialog">Keep playing</button><button class="button button-coral" id="confirm-new">Let’s start fresh <span data-icon="arrow-right"></span></button></div></dialog>
+
+    <dialog id="end-dialog" class="modal compact-modal"><span class="modal-symbol trophy-symbol" data-icon="trophy"></span><p class="eyebrow">THAT WAS A GOOD GAME</p><h2 id="end-title">Well played.</h2><p class="modal-copy" id="end-copy"></p><div class="end-scores"><div>You<strong id="end-you">0</strong></div><span>—</span><div>Cleo<strong id="end-cleo">0</strong></div></div><div class="modal-actions"><button class="button button-light" data-close="end-dialog">See the board</button><button class="button button-coral" id="play-again">One more round <span data-icon="arrow-right"></span></button></div></dialog>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
