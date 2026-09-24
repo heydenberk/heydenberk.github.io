@@ -49,7 +49,7 @@ game ||= createGame();
 let pending = [], selected = null, exchanging = false, swapIds = new Set(), busy = false;
 let pan = { x: 0, y: 0 }, zoom = 1, hintGhost = [], toastTimer, computerTimer, generation = 0;
 let soundEnabled = false, audioContext, storageWarning = false;
-let scorePreviewEnabled = true, previewCell = null;
+let scorePreviewEnabled = true;
 try { soundEnabled = localStorage.getItem('qwirkle-sound') === 'true'; } catch { /* Optional setting. */ }
 try { scorePreviewEnabled = localStorage.getItem('hexathon-score-preview') !== 'false'; } catch { /* Optional setting. */ }
 $('score-preview-toggle').checked = scorePreviewEnabled;
@@ -185,7 +185,6 @@ function position(x, y) {
   return { left: width / 2 + pan.x + x * cell - cell / 2, top: height / 2 + pan.y + y * cell - cell / 2, cell };
 }
 function renderBoard() {
-  hideScorePreview();
   const board = combinedBoard();
   const tile = game.players[0].rack.find(t => t.id === selected);
   const fresh = !Object.keys(board).length;
@@ -203,18 +202,23 @@ function renderBoard() {
     const p = position(x, y);
     if (p.left < -p.cell || p.top < -p.cell || p.left > width || p.top > height) return '';
     const size = p.cell - 5 * zoom;
-    return `<button class="board-cell ${classes}" data-x="${x}" data-y="${y}" aria-label="${esc(label)}" style="left:${p.left + 2.5 * zoom}px;top:${p.top + 2.5 * zoom}px;width:${size}px;height:${size}px" ${extra}>${content}</button>`;
+    return `<button class="board-cell ${classes}" data-x="${x}" data-y="${y}" aria-label="${esc(label)}" style="left:${p.left + 2.5 * zoom}px;top:${p.top + 2.5 * zoom}px;width:${size}px;height:${size}px;--cell-size:${size}px" ${extra}>${content}</button>`;
   }
   if (playable() && !exchanging) {
     const spaces = candidates(board);
     let allowed = 0;
     for (const space of spaces) {
       const ghost = hintGhost.find(p => p.x === space.x && p.y === space.y);
-      if (tile && !validateMove(game.board, [...pending, { ...space, tile }]).valid) continue;
+      const placements = tile ? [...pending, { ...space, tile }] : [];
+      const result = tile ? validateMove(game.board, placements) : null;
+      if (result && !result.valid) continue;
       if (!tile && !fresh && !ghost) continue;
       allowed++;
       const showTile = ghost?.tile;
-      html += cellHtml(space.x, space.y, `space${fresh ? ' origin' : ''}${ghost ? ' ghost' : ''}`, showTile ? `<span style="color:${colorValues[showTile.color]};width:100%;height:100%;display:flex;align-items:center;justify-content:center">${shape(showTile.shape)}</span>` : icon('plus'), tile ? `Place ${tileLabel(tile)} at ${space.x}, ${space.y}` : `Starting space at ${space.x}, ${space.y}`, ghost ? 'title="Suggested placement"' : '');
+      const preview = tile && scorePreviewEnabled ? placementScore(placements, result) : null;
+      const content = preview ? `<span class="cell-score" aria-hidden="true">+${preview.score}</span>` : showTile ? `<span style="color:${colorValues[showTile.color]};width:100%;height:100%;display:flex;align-items:center;justify-content:center">${shape(showTile.shape)}</span>` : icon('plus');
+      const label = tile ? `Place ${tileLabel(tile)} at ${space.x}, ${space.y}${preview ? `. ${preview.description}` : ''}` : `Starting space at ${space.x}, ${space.y}`;
+      html += cellHtml(space.x, space.y, `space${fresh ? ' origin' : ''}${ghost ? ' ghost' : ''}${preview ? ' has-score' : ''}`, content, label, ghost ? 'title="Suggested placement"' : '');
     }
     if (tile && !allowed && !hintGhost.length) $('turn-message').textContent = 'No space for this tile here. Try another tile, undo, or swap.';
   }
@@ -231,51 +235,15 @@ function renderBoard() {
   }
   $('tiles-layer').innerHTML = html;
 }
-function hideScorePreview() {
-  if (previewCell) {
-    previewCell.classList.remove('hover-preview');
-    previewCell.removeAttribute('aria-describedby');
-    previewCell.querySelector('.hover-tile')?.remove();
-    previewCell = null;
-  }
-  $('placement-preview').hidden = true;
-}
-function showScorePreview(cell) {
-  if (!scorePreviewEnabled || !playable() || exchanging || !cell?.matches('.board-cell.space')) {
-    hideScorePreview();
-    return;
-  }
-  if (cell === previewCell) return;
-  hideScorePreview();
-  const tile = game.players[0].rack.find(t => t.id === selected);
-  if (!tile) return;
-  const x = Number(cell.dataset.x), y = Number(cell.dataset.y);
-  const placements = [...pending, { x, y, tile }];
-  const result = validateMove(game.board, placements);
-  if (!result.valid) return;
+function placementScore(placements, result) {
   const bonus = finishingBonus(placements);
   const score = result.score + bonus;
   const remaining = opening() ? openingSize(game.players[0].rack) - placements.length : 0;
-  $('hover-score').textContent = `+${score} ${score === 1 ? 'point' : 'points'}`;
-  $('hover-detail').textContent = remaining > 0 ? `Opening so far · add ${remaining} matching ${remaining === 1 ? 'tile' : 'tiles'}` : `Turn total · ${placements.length} ${placements.length === 1 ? 'tile' : 'tiles'}`;
+  const detail = remaining > 0 ? `Opening so far; add ${remaining} matching ${remaining === 1 ? 'tile' : 'tiles'}` : `Turn total for ${placements.length} ${placements.length === 1 ? 'tile' : 'tiles'}`;
   const bonuses = [];
   if (result.qwirkles) bonuses.push(`${result.qwirkles * 6}-point line bonus`);
   if (bonus) bonuses.push('6-point finish bonus');
-  $('hover-bonus').textContent = bonuses.length ? `Includes ${bonuses.join(' + ')}` : '';
-  $('hover-bonus').hidden = !bonuses.length;
-  previewCell = cell;
-  cell.classList.add('hover-preview');
-  cell.setAttribute('aria-describedby', 'placement-preview');
-  cell.insertAdjacentHTML('beforeend', `<span class="hover-tile" style="color:${colorValues[tile.color]}">${shape(tile.shape)}</span>`);
-  const tooltip = $('placement-preview');
-  tooltip.hidden = false;
-  const spot = position(x, y);
-  const left = Math.max(10, Math.min($('board').clientWidth - tooltip.offsetWidth - 10, spot.left + spot.cell / 2 - tooltip.offsetWidth / 2));
-  let top = spot.top - tooltip.offsetHeight - 9;
-  if (top < 10) top = spot.top + spot.cell + 9;
-  top = Math.max(10, Math.min($('board').clientHeight - tooltip.offsetHeight - 10, top));
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
+  return { score, description: `${score} ${score === 1 ? 'point' : 'points'}. ${detail}.${bonuses.length ? ` Includes ${bonuses.join(' + ')}.` : ''}` };
 }
 function renderActivity() {
   if (!game.log.length) {
@@ -390,22 +358,12 @@ function showEnd() {
 $('rack').addEventListener('click', event => { const tile = event.target.closest('[data-tile]'); if (tile) selectTile(tile.dataset.tile); });
 $('score-preview-toggle').addEventListener('change', event => {
   scorePreviewEnabled = event.target.checked;
-  hideScorePreview();
+  renderBoard();
   try { localStorage.setItem('hexathon-score-preview', String(scorePreviewEnabled)); } catch { /* Optional setting. */ }
 });
-$('board').addEventListener('pointerover', event => {
-  if (event.pointerType !== 'touch') showScorePreview(event.target.closest('.board-cell.space'));
-});
-$('board').addEventListener('pointerout', event => {
-  if (previewCell && !previewCell.contains(event.relatedTarget)) hideScorePreview();
-});
-$('board').addEventListener('pointerleave', hideScorePreview);
-$('board').addEventListener('focusin', event => showScorePreview(event.target.closest('.board-cell.space')));
-$('board').addEventListener('focusout', hideScorePreview);
 let drag = null, didDrag = false;
 $('board').addEventListener('pointerdown', event => {
   if (event.target.closest('button, label, input')) return;
-  hideScorePreview();
   drag = { x: event.clientX, y: event.clientY, startX: pan.x, startY: pan.y };
   didDrag = false; $('board').setPointerCapture(event.pointerId);
 });
