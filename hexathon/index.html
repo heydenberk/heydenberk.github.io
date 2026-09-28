@@ -27,6 +27,10 @@
         <div class="intro-art" aria-hidden="true"><span class="art-tile art-one"></span><span class="art-tile art-two"></span><span class="art-tile art-three"></span><svg class="art-spark" viewBox="0 0 30 30"><path d="M15 2v26M2 15h26M6 6l18 18M6 24 24 6" /></svg></div>
       </section>
 
+      <div class="mode-switch" role="group" aria-label="Game mode">
+        <button id="classic-mode" aria-pressed="true">Play with Cleo</button>
+        <button id="puzzle-mode" aria-pressed="false">Puzzle mode <span data-icon="bulb"></span></button>
+      </div>
       <div class="game-layout">
         <section class="play-area" aria-label="Game table">
           <div class="board-card">
@@ -48,6 +52,20 @@
         </section>
 
         <aside class="sidebar">
+          <section class="puzzle-card" id="puzzle-card" hidden aria-label="Puzzle challenge">
+            <div class="section-label">ONE BOARD. ONE GOOD MOVE. <span data-icon="bulb"></span></div>
+            <label class="puzzle-picker-label" for="puzzle-picker">Choose a puzzle</label>
+            <select id="puzzle-picker"></select>
+            <p class="puzzle-difficulty" id="puzzle-difficulty"></p>
+            <h2 id="puzzle-title"></h2>
+            <p class="puzzle-copy">Find the highest-scoring turn with this hand. Play one or more tiles to reach the target.</p>
+            <div class="puzzle-target"><span>Target score</span><strong id="puzzle-target"></strong></div>
+            <p class="puzzle-copy">Every crossing line counts. No swaps, draws, or going-out bonus.</p>
+            <div id="puzzle-feedback" class="puzzle-feedback" role="status" aria-live="polite"></div>
+            <p id="puzzle-hint" class="puzzle-copy" hidden></p>
+            <div class="puzzle-actions"><button id="puzzle-reset" class="button button-light">Start over</button><button id="puzzle-next" class="button button-coral">Next puzzle <span data-icon="arrow-right"></span></button></div>
+            <p id="puzzle-progress" class="puzzle-progress"></p>
+          </section>
           <section class="score-card"><div class="section-label">A FRIENDLY COMPETITION <span data-icon="trophy"></span></div><div class="player-row" id="player-you"><span class="avatar avatar-you"><span data-icon="smile"></span></span><div class="player-detail"><strong>You <span class="you-badge">THAT’S YOU</span></strong><span id="you-status">Finding your rhythm</span></div><strong class="score" id="you-score">0</strong></div><div class="score-divider"></div><div class="player-row" id="player-cleo"><span class="avatar avatar-cleo"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 13 6 5l8 5h4l8-5-1 8v8c-3 9-15 9-18 0Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/><circle cx="21" cy="18" r="1.4" fill="currentColor"/><path d="m15 22 1.5 1.5L18 22" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span><div class="player-detail"><strong>Cleo <span class="bot-badge">BOT</span></strong><span id="cleo-status">Your pattern pal</span></div><strong class="score" id="cleo-score">0</strong></div><div class="score-note"><span class="tiny-dot"></span><span id="score-note">A good time, one tile at a time.</span></div></section>
 
           <section class="tip-card"><div class="section-label"><span data-icon="sparkle"></span> SMALL TIP, BIG POSSIBILITIES</div><h2>Six is the magic number.</h2><p>Complete a line of six unique tiles.<br> That’s a full line — and <strong>12 points.</strong></p><div class="example-line" id="example-line" aria-hidden="true"></div><div class="tip-bottom"><span>One shape. Every color.</span><span class="point-badge">+12</span></div></section>

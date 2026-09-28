@@ -1,4 +1,5 @@
 import { COLORS, SHAPES, key, createGame, validateMove, candidates, openingSize, playTurn, exchangeTiles, passTurn, shuffle, isSavedGame } from './game.js';
+import { PUZZLES, createPuzzleGame, checkPuzzleMove } from './puzzles.js';
 
 const $ = id => document.getElementById(id);
 const icons = {
@@ -46,6 +47,15 @@ const MIN_ZOOM = .15;
 let game;
 try { const saved = JSON.parse(localStorage.getItem(STORAGE)); if (isSavedGame(saved)) game = saved; } catch { /* Local storage may be unavailable. */ }
 game ||= createGame();
+let mode = 'classic', classicGame = game, puzzleIndex = 0, puzzleSolved = false, attempts = 0;
+let puzzleFeedback = '', puzzleHint = '', completedPuzzles = new Set(), restorePuzzle = false;
+try {
+  const progress = JSON.parse(localStorage.getItem('hexathon-puzzles-v1'));
+  restorePuzzle = progress?.active === true;
+  if (Number.isInteger(progress?.index) && PUZZLES[progress.index]) puzzleIndex = progress.index;
+  if (Array.isArray(progress?.completed)) completedPuzzles = new Set(progress.completed.filter(id => PUZZLES.some(p => p.id === id)));
+} catch { /* Puzzle progress is optional. */ }
+$('puzzle-picker').innerHTML = PUZZLES.map((p, i) => `<option value="${i}">${i + 1}. ${p.title}</option>`).join('');
 let pending = [], selected = null, exchanging = false, swapIds = new Set(), busy = false;
 let pan = { x: 0, y: 0 }, zoom = 1, hintGhost = [], toastTimer, computerTimer, generation = 0;
 let soundEnabled = false, audioContext, storageWarning = false;
@@ -75,6 +85,7 @@ function search(board, rack) {
 }
 
 function save() {
+  if (mode === 'puzzle') { savePuzzleProgress(); return; }
   try { localStorage.setItem(STORAGE, JSON.stringify(game)); }
   catch { if (!storageWarning) { toast('This browser cannot save your game. You can still play here.'); storageWarning = true; } }
 }
@@ -113,7 +124,7 @@ function celebrate() {
     document.body.append(bit); setTimeout(() => bit.remove(), 1900);
   }
 }
-function playable() { return game.current === 0 && !game.over && !busy; }
+function playable() { return game.current === 0 && !game.over && !busy && !puzzleSolved; }
 function combinedBoard() {
   const board = { ...game.board };
   pending.forEach(p => { board[key(p.x, p.y)] = p.tile; });
@@ -121,6 +132,7 @@ function combinedBoard() {
 }
 function opening() { return Object.keys(game.board).length === 0; }
 function finishingBonus(placements) {
+  if (mode === 'puzzle') return 0;
   return !game.bag.length && placements.length === game.players[0].rack.length ? 6 : 0;
 }
 function turnValidation() {
@@ -168,6 +180,7 @@ function render() {
   $('hint-button').innerHTML = `${icon('bulb')}${busy && game.current === 0 ? 'Finding a move…' : 'A little hint'}`;
   const diff = game.players[0].score - game.players[1].score;
   $('score-note').textContent = game.over ? 'Good company. Good game.' : diff === 0 ? 'A good time, one tile at a time.' : diff > 0 ? `You’re ${diff} ${diff === 1 ? 'point' : 'points'} ahead. Keep connecting.` : 'Plenty of possibilities still on the table.';
+  renderMode(result);
   renderRack(); renderBoard(); renderActivity();
   if (focusSelector) document.querySelector(focusSelector)?.focus({ preventScroll: true });
 }
@@ -220,7 +233,7 @@ function renderBoard() {
       const label = tile ? `Place ${tileLabel(tile)} at ${space.x}, ${space.y}${preview ? `. ${preview.description}` : ''}` : `Starting space at ${space.x}, ${space.y}`;
       html += cellHtml(space.x, space.y, `space${fresh ? ' origin' : ''}${ghost ? ' ghost' : ''}${preview ? ' has-score' : ''}`, content, label, ghost ? 'title="Suggested placement"' : '');
     }
-    if (tile && !allowed && !hintGhost.length) $('turn-message').textContent = 'No space for this tile here. Try another tile, undo, or swap.';
+    if (tile && !allowed && !hintGhost.length) $('turn-message').textContent = mode === 'puzzle' ? 'No space for this tile here. Try another tile or undo.' : 'No space for this tile here. Try another tile, undo, or swap.';
   }
   for (const [coords, placed] of Object.entries(board)) {
     const [x, y] = coords.split(',').map(Number);
@@ -297,6 +310,7 @@ function afterTurn() {
 }
 function commit() {
   if (!playable()) return;
+  if (mode === 'puzzle') { submitPuzzle(); return; }
   try {
     game = exchanging ? exchangeTiles(game, [...swapIds]) : playTurn(game, pending);
     afterTurn();
@@ -319,6 +333,7 @@ function scheduleComputer() {
 }
 async function hint() {
   if (!playable() || exchanging) return;
+  if (mode === 'puzzle') { puzzleHint = PUZZLES[puzzleIndex].hint; render(); toast(puzzleHint); return; }
   if (pending.length) { toast('Undo your staged tiles first to see a fresh suggestion.'); return; }
   const version = generation;
   busy = true; render();
@@ -342,8 +357,87 @@ function undo() {
 function newGame() {
   generation++; clearTimeout(computerTimer);
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
-  game = createGame(); busy = false; clearTurn(); save(); render(); fitBoard();
+  mode = 'classic'; puzzleSolved = false;
+  game = createGame(); classicGame = game; busy = false; clearTurn(); save(); render(); fitBoard();
+  savePuzzleProgress();
   if (game.current === 1) scheduleComputer();
+}
+function savePuzzleProgress() {
+  try {
+    localStorage.setItem('hexathon-puzzles-v1', JSON.stringify({ index: puzzleIndex, completed: [...completedPuzzles], active: mode === 'puzzle' }));
+  } catch { /* Puzzles still work without storage. */ }
+}
+function loadPuzzle(index) {
+  generation++; clearTimeout(computerTimer);
+  clearTimeout(toastTimer); $('toast').classList.remove('visible');
+  puzzleIndex = index; puzzleSolved = false; attempts = 0;
+  puzzleFeedback = 'Take your time. You can try as many moves as you like.';
+  puzzleHint = ''; busy = false; clearTurn();
+  game = createPuzzleGame(PUZZLES[index]);
+  savePuzzleProgress(); render(); fitBoard();
+}
+function switchMode(next) {
+  if (mode === next) return;
+  generation++; clearTimeout(computerTimer);
+  clearTimeout(toastTimer); $('toast').classList.remove('visible');
+  busy = false; clearTurn();
+  if (next === 'puzzle') {
+    classicGame = game; mode = next; loadPuzzle(puzzleIndex);
+  } else {
+    mode = next; puzzleSolved = false; game = classicGame;
+    savePuzzleProgress(); render(); fitBoard();
+    if (game.current === 1 && !game.over) scheduleComputer();
+  }
+}
+function renderMode(result) {
+  const isPuzzle = mode === 'puzzle';
+  document.body.classList.toggle('puzzle-mode', isPuzzle);
+  $('classic-mode').setAttribute('aria-pressed', String(!isPuzzle));
+  $('puzzle-mode').setAttribute('aria-pressed', String(isPuzzle));
+  $('puzzle-card').hidden = !isPuzzle;
+  $('new-button').hidden = isPuzzle;
+  document.querySelector('.table-pill').textContent = isPuzzle ? 'PUZZLE' : 'VS. CLEO';
+  document.querySelector('.intro-copy').textContent = isPuzzle ? 'One board. One hand. Find the move that makes it all click.' : 'Match a color. Find a shape. Make your next move.';
+  if (!isPuzzle) return;
+  const puzzle = PUZZLES[puzzleIndex];
+  $('puzzle-picker').value = String(puzzleIndex);
+  $('puzzle-title').textContent = puzzle.title;
+  $('puzzle-difficulty').textContent = `${puzzle.difficulty} · Puzzle ${puzzleIndex + 1} of ${PUZZLES.length}`;
+  $('puzzle-target').textContent = `${puzzle.target} pts`;
+  $('puzzle-feedback').textContent = puzzleFeedback;
+  $('puzzle-feedback').classList.toggle('solved', puzzleSolved);
+  $('puzzle-hint').hidden = !puzzleHint;
+  $('puzzle-hint').textContent = `Hint: ${puzzleHint}`;
+  $('puzzle-progress').textContent = `${completedPuzzles.size} of ${PUZZLES.length} solved · ${attempts} ${attempts === 1 ? 'attempt' : 'attempts'}${completedPuzzles.size === PUZZLES.length ? ' · Collection complete!' : ''}`;
+  $('puzzle-reset').textContent = puzzleSolved ? 'Play again' : 'Start over';
+  $('puzzle-next').innerHTML = `${puzzleIndex === PUZZLES.length - 1 ? 'Back to first' : 'Next puzzle'} ${icon('arrow-right')}`;
+  $('table-status').textContent = puzzleSolved ? 'Puzzle solved' : `Find ${puzzle.target} points`;
+  $('turn-number').textContent = `PUZZLE ${String(puzzleIndex + 1).padStart(2, '0')}`;
+  $('play-button').innerHTML = `Check move ${icon('arrow-right')}`;
+  $('rack-instruction').textContent = puzzleSolved ? 'Nicely connected. Ready for another?' : 'Make your best turn with this hand.';
+  $('move-preview').textContent = puzzleSolved ? `${puzzle.target} points · Solved!` : pending.length && result.valid ? `${result.score} / ${puzzle.target} points` : `Target: ${puzzle.target} points`;
+  $('turn-message').textContent = puzzleSolved ? 'You found it! Try the next puzzle.' : pending.length ? result.valid ? `${result.score} points staged. Check your move when ready.` : result.error : `Find a turn worth ${puzzle.target} points.`;
+  $('exchange-button').disabled = true;
+}
+function submitPuzzle() {
+  const puzzle = PUZZLES[puzzleIndex];
+  const result = checkPuzzleMove(puzzle, pending);
+  if (!result.valid) { puzzleFeedback = result.error; render(); return; }
+  attempts++;
+  if (!result.solved) {
+    puzzleFeedback = `That’s a legal ${result.score}-point move. Find ${puzzle.target - result.score} more to reach ${puzzle.target}. Undo or start over to try again.`;
+    render(); toast(`${result.score} points. Keep looking for ${puzzle.target}! You can undo to try again.`); return;
+  }
+  puzzleSolved = true;
+  completedPuzzles.add(puzzle.id);
+  game.board = combinedBoard();
+  game.lastMove = pending.map(({ x, y }) => ({ x, y }));
+  const used = new Set(pending.map(p => p.tile.id));
+  game.players[0].rack = game.players[0].rack.filter(t => !used.has(t.id));
+  game.players[0].score = result.score;
+  clearTurn();
+  puzzleFeedback = `Solved in ${attempts} ${attempts === 1 ? 'attempt' : 'attempts'}! ${puzzle.explanation}`;
+  savePuzzleProgress(); render(); fitBoard(); celebrate(); tone('qwirkle');
 }
 function showEnd() {
   const [you, cleo] = game.players;
@@ -398,7 +492,7 @@ $('undo-button').onclick = undo;
 $('hint-button').onclick = hint;
 $('shuffle-button').onclick = () => { if (playable()) { game.players[0].rack = shuffle(game.players[0].rack); save(); renderRack(); tone('select'); } };
 $('exchange-button').onclick = () => {
-  if (!playable() || pending.length || opening()) return;
+  if (mode === 'puzzle' || !playable() || pending.length || opening()) return;
   if (!game.bag.length) {
     try { game = passTurn(game); afterTurn(); } catch (error) { toast(error.message); }
     return;
@@ -406,6 +500,11 @@ $('exchange-button').onclick = () => {
   exchanging = !exchanging; swapIds.clear(); selected = null; hintGhost = []; render();
 };
 $('help-button').onclick = () => $('help-dialog').showModal();
+$('classic-mode').onclick = () => switchMode('classic');
+$('puzzle-mode').onclick = () => switchMode('puzzle');
+$('puzzle-picker').onchange = event => loadPuzzle(Number(event.target.value));
+$('puzzle-reset').onclick = () => loadPuzzle(puzzleIndex);
+$('puzzle-next').onclick = () => loadPuzzle((puzzleIndex + 1) % PUZZLES.length);
 $('new-button').onclick = () => $('new-dialog').showModal();
 $('confirm-new').onclick = newGame;
 $('play-again').onclick = newGame;
@@ -427,5 +526,7 @@ document.addEventListener('keydown', event => {
   }
 });
 new ResizeObserver(() => renderBoard()).observe($('board'));
-updateSound(); render(); fitBoard(); save();
+updateSound();
+if (restorePuzzle) switchMode('puzzle');
+render(); fitBoard(); save();
 if (game.current === 1 && !game.over) scheduleComputer();
